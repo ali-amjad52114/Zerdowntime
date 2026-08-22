@@ -13,7 +13,10 @@
       "status": "building",
       "evidence_required": true
     },
-    "relations": { "project": "zero-downtime-factory", "brief": "serpina1-aatd-xyz" }
+    "relations": {
+      "project": "zero-downtime-factory",
+      "brief": "serpina1-aatd-xyz"
+    }
   },
   {
     "identifier": "serpina1-y-structure",
@@ -29,7 +32,10 @@
       "status": "building",
       "evidence_required": true
     },
-    "relations": { "project": "zero-downtime-factory", "brief": "serpina1-aatd-xyz" }
+    "relations": {
+      "project": "zero-downtime-factory",
+      "brief": "serpina1-aatd-xyz"
+    }
   },
   {
     "identifier": "serpina1-z-ip",
@@ -45,6 +51,66 @@
       "status": "building",
       "evidence_required": true
     },
-    "relations": { "project": "zero-downtime-factory", "brief": "serpina1-aatd-xyz" }
+    "relations": {
+      "project": "zero-downtime-factory",
+      "brief": "serpina1-aatd-xyz"
+    }
+  },
+  {
+    "identifier": "serpina1-x-trial-sites",
+    "title": "X — Trial Site Geography",
+    "properties": {
+      "axis": "X",
+      "question": "Where in the world is anyone actually running trials for this?",
+      "source_name": "ClinicalTrials.gov study locations",
+      "source_kind": "api",
+      "provider": "ClinicalTrials.gov",
+      "artifact_path": "src/axes/x/site-geography.mjs",
+      "factory_version": "candidate-v1",
+      "status": "building",
+      "evidence_required": true
+    },
+    "relations": {
+      "project": "zero-downtime-factory",
+      "brief": "serpina1-aatd-xyz"
+    }
+  },
+  {
+    "identifier": "serpina1-y-target-identity",
+    "title": "Y — Target Identity",
+    "properties": {
+      "axis": "Y",
+      "question": "What is this protein, how heavy is it, and where in the cell is it annotated?",
+      "source_name": "UniProtKB",
+      "source_kind": "api",
+      "provider": "UniProtKB",
+      "artifact_path": "src/axes/y/target-identity.mjs",
+      "factory_version": "candidate-v1",
+      "status": "building",
+      "evidence_required": true
+    },
+    "relations": {
+      "project": "zero-downtime-factory",
+      "brief": "serpina1-aatd-xyz"
+    }
+  },
+  {
+    "identifier": "serpina1-z-orphan",
+    "title": "Z — Orphan Exclusivity",
+    "properties": {
+      "axis": "Z",
+      "question": "What is on the orphan register, and is an exclusivity clock running?",
+      "source_name": "FDA and EMA orphan designation registers",
+      "source_kind": "web",
+      "provider": "Bright Data",
+      "artifact_path": "src/axes/z/orphan-exclusivity.mjs",
+      "factory_version": "candidate-v1",
+      "status": "building",
+      "evidence_required": true
+    },
+    "relations": {
+      "project": "zero-downtime-factory",
+      "brief": "serpina1-aatd-xyz"
+    }
   }
 ]
