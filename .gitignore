@@ -3,5 +3,7 @@
 !.env.example
 node_modules/
 artifacts/
+observability/signoz/pours/
+observability/signoz/casting.yaml.lock
 .DS_Store
 

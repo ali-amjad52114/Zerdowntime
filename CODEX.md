@@ -14,3 +14,11 @@
 ## Integration boundary
 
 The single-page fixture is only an integration smoke test. Application code consumes normalized structured records so the final product source can be swapped without rewriting Port or SigNoz integration.
+
+## SigNoz / OpenTelemetry
+
+- Export OTLP/HTTP to `OTEL_EXPORTER_OTLP_ENDPOINT`; keep optional ingestion headers only in the environment or ignored `.env.local`.
+- Preserve `run.id` across API, workflow, source/scrape, retry, logs, and metrics.
+- Keep source-specific fields behind `src/records.mjs`; instrumentation belongs around product-neutral stages.
+- Use `normal`, `fail`, and `recover` fixture modes for repeatable demos. They must never mutate the real collector or approve a real repair.
+- Run `npm test` for deterministic exporter assertions and `npm run telemetry:smoke` for live SigNoz evidence.
