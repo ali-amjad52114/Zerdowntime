@@ -83,6 +83,103 @@ npm run mend:telemetry:smoke
 Search SigNoz for `mend-v1-healthy`, `mend-v1-x-failed`, and
 `mend-v2-recovered` to follow healthy → isolated X failure → recovery.
 
+## Meridian — the controlled break surface, and the heal
+
+`mend/` is a fictional biotech pipeline site published as static HTML in four versions,
+built to be broken on purpose. It is the source the X axis scrapes and the reason the
+repair loop has something real to repair.
+
+Its point is the *kind* of failure it produces. The X/Y/Z fixtures break by renaming a
+JSON key, which is loud: the shape changes and anything reading it fails structurally.
+Meridian v2 is a routine redesign that merges the phase column into status pills while
+every row keeps its data attributes. The scrape returns **HTTP 200 with twenty rows and
+no exception**, and one field is quietly gone:
+
+```
+v4  rows=20  schema_conformance=1.00  phase_null=0.00  none            -> publish
+v2  rows=20  schema_conformance=0.05  phase_null=0.95  selector_drift  -> REPAIR
+```
+
+The row count does not move. Nothing that watches error rate, HTTP status or row count
+sees this — which is why the alerts key on conformance and never on error rate.
+
+**v4 is the healthy baseline, not v1.** The numbers are Meridian's own release order.
+v1 is a source outage (`empty_result`), v3 breaks a field and adds one in the same
+release (`upstream_shape_change` → ESCALATE).
+
+### The heal
+
+```sh
+npm run mend:heal                 # v4 -> v2: derive, gate, approve, deploy, verify
+npm run mend:heal -- --reject     # the interlock: reviewer declines, nothing deploys
+npm run mend:heal -- --broken v3  # ambiguous - escalates rather than guessing
+npm run mend:heal -- --broken v1  # outage - a selector repair cannot make rows appear
+npm run mend:heal -- --reset      # forget the deployed repair and start over
+```
+
+The repair is derived from the page rather than selected from a list. A healthy run
+stores what each row said, and the synthesizer searches the changed markup for where
+those values went, covering rows until every one is explained. On v2 that reaches the
+new stage pill for 19 rows and keeps going, because one archived row still renders
+through the pre-refresh partial — arriving at the union without being told a union was
+needed.
+
+Every candidate then goes through two gates, and the mined hard negatives ride along on
+every run so the gates are shown working rather than described:
+
+| Proposal | conformance | numeric bar | validator |
+|---|---|---|---|
+| derived union | 1.00 | pass | **accept** |
+| derived, stopping early | 0.95 | **fail** | reject |
+| HN-2 the neighbouring pill | **1.00** | pass | **reject** |
+| HN-3 the machine slug | **1.00** | pass | **reject** |
+
+HN-2 and HN-3 are numerically identical to a correct repair and wrong in 20 and 19 rows
+out of 20. Only reading the values separates them. HN-1 goes the other way: 0.95 clears
+the 0.85 alert threshold while one row in twenty is still wrong.
+
+A repair that passes both gates still has to be approved by someone other than its
+author, deployed into the scraper registry, and then **re-measured** — release is decided
+by the re-scrape, not by having applied a fix.
+
+Full design, method and stated limitations: [`docs/MEND_HEALING.md`](docs/MEND_HEALING.md).
+
+### Running the site
+
+```sh
+npm run site:build             # data/ + templates/ -> mend/versions/{v1,v2,v3,v4}
+npm run site:activate v4       # publish the healthy baseline to mend/public/
+npm run site:serve             # http://localhost:4173
+npm run site:test              # the site's own 75 assertions
+```
+
+Over HTTP, with `npm start` running:
+
+```sh
+curl -X POST localhost:3000/mend/repair -H 'content-type: application/json' -d '{}'
+curl -X POST localhost:3000/mend/runs -H 'content-type: application/json' \
+  -d '{"source":"meridian","mode":"break-x"}'
+curl localhost:3000/mend/scraper
+open http://localhost:3000/mend/repair
+```
+
+`{"source":"meridian"}` runs the same X/Y/Z slice with Meridian behind X. When the page
+breaks, X goes `STALE_HEALTHY` and keeps serving its last good records while Y and Z stay
+published — one source moving a selector must not take the other two down with it.
+
+By default everything above reads the committed `mend/versions/` tree, so it needs no
+network, no deployment and no credentials. The deployment is built from that same tree,
+so both paths read the same bytes. Set `MEND_MERIDIAN_URL` to scrape the deployed origin
+instead.
+
+### Deploying it
+
+The repo root `vercel.json` points at `mend/public`, so a Vercel project on this repo
+serves Meridian. That file is also what stops Vercel's zero-config Node detection from
+wrapping `src/server.mjs` as a serverless function, which would crash on boot. See
+[`mend/README.md`](mend/README.md) for the Edge Config switch that flips which version
+`/pipeline` serves without a redeploy.
+
 ## SigNoz / OpenTelemetry
 
 The fixture exports OTLP/HTTP traces, structured logs, and metrics without

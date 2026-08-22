@@ -31,17 +31,26 @@ in APIs. When one of those pages is redesigned, a scraper does not usually crash
 detecting, and it is hard to demo against someone else's website because you cannot make them
 redesign it on cue.
 
-So this is our website, in three versions.
+So this is our website, in four versions.
 
-| | What changed | `rows_returned` | `schema_conformance` | Route |
-|---|---|---|---|---|
-| **v1** | baseline | 20 | 1.00 | — |
-| **v2** | Phase and Status merged into status pills; Partner moved ahead of Indication; new stylesheet | **20** | **0.05** | REPAIR |
-| **v3** | Target column added | 20 | 1.00¹ | EVOLVE |
+**v4 is the healthy baseline**, not v1. The version numbers are release order on
+Meridian's side — v4 is `Meridian Web 2.3.1`, the oldest page here — and the demo runs
+v4 → v2, not v1 → v2. Worth reading twice; it is the one confusing thing about this
+fixture.
 
-¹ with a healed scraper. See [the ordering note](#the-order-matters).
+| | Generator | What changed | `rows_returned` | `schema_conformance` | `failure_class` | Route |
+|---|---|---|---|---|---|---|
+| **v4** | 2.3.1 | the healthy page | 20 | 1.00 | `none` | — |
+| **v1** | 3.0.0 | source outage — the payload arrives empty | **0** | 0.00 | `empty_result` | REPAIR |
+| **v2** | 2.4.0 | Phase and Status merged into status pills; Partner moved ahead of Indication; new stylesheet | **20** | **0.05** | `selector_drift` | REPAIR |
+| **v3** | 3.1.0 | Indication renamed to `data-disease`, Target column added | 20 | 0.00 | `upstream_shape_change` | ESCALATE |
 
-The row count does not move. That is the entire point.
+Between v4 and v2 the row count does not move. That is the entire point, and it is why
+v2 is the demo: v1 is the loud failure everyone already detects, and v3 is the ambiguous
+one nothing should attempt to auto-repair.
+
+`test/signals.test.mjs` asserts every number in that table, so it is a test of the pages
+rather than a claim about them.
 
 ## The exact diff between versions
 
@@ -86,8 +95,8 @@ else. `unmapped_fields_seen: ["target"]`, conformance untouched.
 
 ```sh
 npm test                       # 47 assertions: the break is what we say it is
-npm run site:build             # data/ + templates/ -> versions/v1, v2, v3
-npm run site:activate v1       # versions/v1 -> public/
+npm run site:build             # data/ + templates/ -> versions/v1, v2, v3, v4
+npm run site:activate v4       # versions/v4 -> public/  (the healthy baseline)
 npm run site:serve             # http://localhost:4173
 ```
 
@@ -102,7 +111,7 @@ git push                       # Vercel redeploys in ~30s
 ```
 
 The canonical URL `/pipeline` never changes and the scraper config never learns that versions
-exist. Reverting is `npm run site:activate v1` and another push.
+exist. Reverting is `npm run site:activate v4` and another push.
 
 `versions/` and `public/` are **committed on purpose**. The rendered HTML is the artefact — the
 v1→v2 diff in git is what a redesign actually looks like, and that diff is part of the demo.
@@ -127,12 +136,13 @@ be checked by anyone, offline, in a second, and so the agent track has an oracle
 proposed heal against before spending a collector run on it.
 
 ```
-v1 baseline     rows=20 conf=1.00 phaseNull=0.00 unmapped=[]       selector_drift? no    -> none
-v2 baseline     rows=20 conf=0.05 phaseNull=0.95 unmapped=[]       selector_drift        -> repair
-v2 healed_naive rows=20 conf=0.95 phaseNull=0.05 unmapped=[]       none                  -> none
-v2 healed       rows=20 conf=1.00 phaseNull=0.00 unmapped=[]       none                  -> none
-v3 healed       rows=20 conf=1.00 phaseNull=0.00 unmapped=[target] schema_extension      -> evolve
-v3 baseline     rows=20 conf=0.05 phaseNull=0.95 unmapped=[target] upstream_shape_change -> escalate
+v4 baseline     rows=20 conf=1.00 phaseNull=0.00 unmapped=[]               none                  -> none
+v1 baseline     rows= 0 conf=0.00 phaseNull=-    unmapped=[]               empty_result          -> repair
+v2 baseline     rows=20 conf=0.05 phaseNull=0.95 unmapped=[]               selector_drift        -> repair
+v2 healed_naive rows=20 conf=0.95 phaseNull=0.05 unmapped=[]               none                  -> none
+v2 healed       rows=20 conf=1.00 phaseNull=0.00 unmapped=[]               none                  -> none
+v3 baseline     rows=20 conf=0.00 phaseNull=0.95 unmapped=[disease,target] upstream_shape_change -> escalate
+v3 healed       rows=20 conf=0.00 phaseNull=0.00 unmapped=[disease,target] upstream_shape_change -> escalate
 ```
 
 `test/signals.test.mjs` asserts every one of those numbers, so the telemetry contract is not a
@@ -172,19 +182,23 @@ So release needs **two gates**: `numeric bar passes AND validator accepts`. See
 [contracts/repair-validator.md](contracts/repair-validator.md); the evidence is pinned in
 `test/hard-negatives.test.mjs`, and `/control` shows it live.
 
-### The order matters
+### v3 escalates either way
 
-v3 builds on v2's redesign. A scraper healed during v2 reads v3 cleanly and reports
-`schema_extension` → EVOLVE. An **unhealed** scraper hitting v3 sees a broken field *and* a new
-field at once, which is genuinely ambiguous — a moved field and a replaced field look identical
-from the signals alone — and routes to `upstream_shape_change` → ESCALATE rather than guessing.
+v3 builds on v2's redesign and then renames `data-indication` to `data-disease` while adding a
+`target` column. So it breaks a field *and* grows one in the same release, which is genuinely
+ambiguous — if the new field carries the old one's data this is a rename, and if it does not
+this is a break plus an unrelated addition. Both readings fit the signals.
 
-Both behaviours are correct. Only the first is the demo. Rehearse the order.
+That routes to `upstream_shape_change` → **ESCALATE**, and it stays there even for a scraper
+healed during v2, because healing `phase` does nothing for `indication`. Guessing here is how a
+self-healing system quietly corrupts data, so v3 is the beat where the factory declines to act.
+
+`npm run mend:heal -- --broken v3` shows it declining.
 
 ## The break button
 
 `/control` flips which version the server returns at `/pipeline`, in under a second, without a
-redeploy. All three versions are always deployed at `/_v/v1`, `/_v/v2`, `/_v/v3`; an Edge
+redeploy. All four versions are always deployed at `/_v/v1` … `/_v/v4`; an Edge
 Middleware rewrites `/pipeline` to whichever one a pointer in Vercel Edge Config names.
 
 ```
@@ -237,23 +251,28 @@ The scaffold's `normal | fail | recover` modes map onto the versions:
 
 | mode | HTML | scraper config |
 |---|---|---|
-| `normal` | `versions/v1` | `baseline` |
-| `fail` | `versions/v2` | `baseline` |
-| `recover` | `versions/v2` | `healed` |
+| `normal` | `versions/v4` | whatever is deployed |
+| `break-x` | `versions/v2` | whatever is deployed |
+| `repaired` | `versions/v2` | whatever is deployed |
 
-`recover` serves **the same bytes** as `fail`. What changed is the scraper, not the page. Worth
-saying out loud in the demo — it is the difference between healing and papering over. There are
-no separate fixture copies to drift out of sync, because the fixtures *are* `versions/`.
+`repaired` serves **the same bytes** as `break-x`. What changed is the scraper, not the page.
+Worth saying out loud in the demo — it is the difference between healing and papering over.
+There are no separate fixture copies to drift out of sync, because the fixtures *are*
+`versions/`.
+
+Note that all three rows say the same thing about the config: the factory reads it from the
+scraper registry rather than selecting one per mode, so `repaired` is only repaired if a heal
+was actually approved and deployed first. See `../src/mend/meridian-runners.mjs`.
 
 ## What is here
 
 ```
 data/programs.json          20 programmes — the single source of truth
-templates/                  layout, shared home + detail, three pipeline renderers, three stylesheets
+templates/                  layout, shared home + detail, four pipeline renderers, four stylesheets
 control/                    the control room — index.html, control.js, control.css
 scripts/                    build.mjs, activate.mjs, serve.mjs — no dependencies
-versions/v1 v2 v3           committed rendered HTML, 22 pages each
-public/                     committed, deploys: canonical + _v/{v1,v2,v3} + control/
+versions/v1 v2 v3 v4        committed rendered HTML, 23 pages each
+public/                     committed, deploys: canonical + _v/{v1,v2,v3,v4} + control/
 src/extract-core.mjs        extraction + signals, pure — shared by Node and the browser
 src/extract.mjs             Node binding (the oracle the tests assert against)
 src/extract-web.mjs         browser binding for the control room
@@ -338,7 +357,13 @@ the canonical `/pipeline` URL never changes.
 
 ## Not in this task
 
-The tracker, the Bright Data collector (still pointed at `example.com`), the agent diagnosis
-loop, the Port workflow automation, the SigNoz deployment, and the DNDi and ChEMBL integrations.
-All of them build against [`CONTRACTS.md`](CONTRACTS.md), which is frozen here so those four
-tracks can run in parallel and integrate early rather than late.
+The tracker, the Bright Data collector (still pointed at `example.com`), the Port workflow
+automation, the SigNoz deployment, and the DNDi and ChEMBL integrations. All of them build
+against [`CONTRACTS.md`](CONTRACTS.md), which is frozen here so those tracks can run in parallel
+and integrate early rather than late.
+
+The diagnosis and repair loop is no longer in this list — it lives in `../src/mend/` and is
+documented in [`../docs/MEND_HEALING.md`](../docs/MEND_HEALING.md). The Repair-Validator is
+implemented there as a deterministic judge rather than the LLM one
+[`contracts/repair-validator.md`](contracts/repair-validator.md) specifies; the interface is
+the one in that spec, so a model-backed judge drops in without changing the caller.

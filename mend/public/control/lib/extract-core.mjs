@@ -121,6 +121,18 @@ export const HARD_NEGATIVES = {
   },
 };
 
+/**
+ * Every row the extractor sees, as [label, rowHtml].
+ *
+ * Exported so a repair synthesizer searches exactly the rows extract() parses rather
+ * than declaring a second row regex that could drift from this one. A synthesizer that
+ * disagreed with the extractor about what a row is would propose repairs against markup
+ * the extractor never reads.
+ */
+export function eachRow(html) {
+  return [...html.matchAll(ROW_RE)].map(([, label, row]) => [label, row]);
+}
+
 /** Every attribute key the row actually publishes, mapped or not. Drives unmapped_fields_seen. */
 function observedKeys(row) {
   const keys = new Set();
