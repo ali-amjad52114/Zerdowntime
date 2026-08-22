@@ -163,6 +163,41 @@ listed as unmatched rather than assigned one. Priority review voucher bands addi
 carry **verify before relying** — voucher prices come from filings and press, and the rare
 paediatric programme has been subject to sunset and reauthorisation.
 
+## Factory line and derived / downstream sections
+
+Above the run trace, the factory line diagram (`src/mend/factory-line.mjs`) draws the page's
+literal shape: disease name in, five stations, five derived products. Its five station nodes
+are the same X / Y / Y.target_identity / X.site_geography / Z.orphan_exclusivity mapping the
+five panels above already use for their own status badge — one mapping, not two.
+
+Below the five panels, a second "Derived / downstream" section reads what those five panels
+already produced and builds five further views, each with a hand-drawn 3D chart
+(`src/mend/viz3d.mjs`: `scatter3d`, `bars3d`, `ribbon3d`, fixed 30° isometric projection, no
+chart library):
+
+| Section | Chart | Comes from |
+|---|---|---|
+| Product positioning | `scatter3d` | X pipeline programs — stage, mechanism-crowding differentiation, modality-complexity simplicity |
+| Go-to-market strategy | `bars3d` | X.site_geography regions × a curated channel list |
+| Insight generalization | `bars3d` | All five panels' own signals, triangulated — never a claim about another disease |
+| Revenue — illustrative planning model | `ribbon3d` | X + Z.orphan_exclusivity, anchored on the cited cost and epidemiology tables |
+| Resourcing | `bars3d` | X pipeline stage and modality, against a headcount-by-phase pattern |
+
+Every number on these five sections is tagged **computed** (a formula over this run's own real
+axis output, no citation needed) or **illustrative** (`src/mend/illustrative-assumptions.mjs`
+— a disclosed planning constant, never presented as a fact, styled with its own token so it is
+never confused with a degraded stage). The revenue model's exclusivity cliff, when drawn, is a
+real currently-running third-party clock from `Z.orphan_exclusivity` — shown as market context,
+never claimed as this model's own exclusivity date, since no designation exists yet for a
+hypothetical new entrant.
+
+`src/mend/downstream-status.mjs` is what makes `--mode break-x` propagate visibly into these
+five sections: a dependency map names the exact stage id each section's formula actually reads
+(a degraded parent axis does not automatically degrade its sub-axis, so this has to be exact,
+not "the axis it's roughly under"), and rolls that up to released / degraded / blocked — the
+same two-tier vocabulary `run-trace.mjs` already uses. A blocked section (no previous healthy
+snapshot to fall back to) replaces its chart with a caption instead of rendering from nothing.
+
 ## SigNoz / OpenTelemetry
 
 The fixture exports OTLP/HTTP traces, structured logs, and metrics without
