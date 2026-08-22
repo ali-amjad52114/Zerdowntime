@@ -4,7 +4,7 @@
 
 **LOCAL PRODUCT ACCEPTED; CLOUD RELEASE BLOCKED.** The merged product passes the deterministic suite and complete local browser workflow. Bright Data has strict live G3 proof. Port has live catalog and Port-to-GitHub proof, but not a live callback into a cloud-hosted Mend API. SigNoz service-account API and MCP access work, but exact-run OTLP cloud ingestion/readback is not proven because the Cloud ingestion endpoint/header are not configured.
 
-Frozen integrated commit before this report: `0ef5e7c`.
+Integrated product commit: `0ef5e7c`; evidence/report commit pushed to `origin/master`: `6b1c5fe`.
 
 ## Automated integration evidence
 
@@ -61,7 +61,7 @@ The merged server ran at `http://localhost:3100/mend` with durable file state.
 - Synced/read back 14 blueprints, five production seed entities, and eight actions.
 - Live bounded Port-to-GitHub dispatch: PASS.
 - Port run: `r_qBVeTDdvAQ5pqh3f`; GitHub run: `32606151307`; final status: SUCCESS.
-- Strict Port-to-cloud-Mend callback: BLOCKED because the deployed/default branch predates the new callback workflow and no reachable `MEND_API_URL` / matching `MEND_PORT_ACTION_TOKEN` is configured.
+- Strict Port-to-cloud-Mend callback: BLOCKED. The new callback workflow is now on remote `master`, but no reachable cloud `MEND_API_URL` / matching `MEND_PORT_ACTION_TOKEN` is configured.
 - Redacted evidence: `docs/gates/G3_PORT_PROOF_2026-08-22.md`.
 
 ### SigNoz — PARTIAL
@@ -79,4 +79,3 @@ The merged server ran at `http://localhost:3100/mend` with durable file state.
 2. Configure the same `MEND_PORT_ACTION_TOKEN` in Mend and GitHub, plus `MEND_API_URL` in GitHub.
 3. Configure the SigNoz Cloud OTLP endpoint and ingestion header; then run `npm run signoz:g3:smoke` and retain exact-run traces/logs/metrics readback.
 4. Rerun the cloud browser and sponsor gate on the deployed commit before release.
-
