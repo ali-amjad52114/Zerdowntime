@@ -1,0 +1,21 @@
+[
+  {
+    "organization": "Example Therapeutics",
+    "program": "CFTR-101",
+    "disease": "Cystic fibrosis",
+    "target_mechanism": "CFTR potentiator",
+    "development_stage": "Phase 1",
+    "status": "Active",
+    "source_url": "https://biotech.example/pipeline",
+    "evidence_excerpt": "CFTR-101 is an active Phase 1 CFTR potentiator for cystic fibrosis."
+  },
+  {
+    "organization": "Unrelated Bio",
+    "program": "PCSK9-1",
+    "disease": "Hypercholesterolemia",
+    "target_mechanism": "PCSK9 inhibitor",
+    "development_stage": "Phase 2",
+    "source_url": "https://biotech.example/pipeline",
+    "evidence_excerpt": "PCSK9-1 is in Phase 2 for hypercholesterolemia."
+  }
+]

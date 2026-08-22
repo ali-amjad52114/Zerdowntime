@@ -1,0 +1,21 @@
+[
+  {
+    "organization": "Cardio Example Bio",
+    "program": "PCSK9-22",
+    "disease": "Familial hypercholesterolemia",
+    "target_mechanism": "PCSK9 inhibition",
+    "development_stage": "Phase 2",
+    "status": "Recruiting",
+    "source_url": "https://cardio.example/pipeline",
+    "evidence_excerpt": "PCSK9-22 is a Phase 2 PCSK9 inhibitor for familial hypercholesterolemia."
+  },
+  {
+    "organization": "Respiratory Example Bio",
+    "program": "CFTR-9",
+    "disease": "Cystic fibrosis",
+    "target_mechanism": "CFTR corrector",
+    "development_stage": "Preclinical",
+    "source_url": "https://cardio.example/pipeline",
+    "evidence_excerpt": "CFTR-9 is a preclinical CFTR corrector."
+  }
+]

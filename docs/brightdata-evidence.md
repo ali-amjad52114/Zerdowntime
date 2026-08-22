@@ -24,7 +24,10 @@ Collector `c_mt4ircei2gdaam94xf` is a half-built attempt against Bright Data's o
 
 ## Remaining Bright Data work
 
-- Connect normalized output to the eventual application feature.
+- The generic post-selection adapter and durable source-execution contract are now implemented; S1 still needs to call the interface from its target-run orchestration.
+- Run the G3 live proof with an actual external provider run/snapshot ID and retain the redacted execution manifest.
 - Ask a Bright Data mentor why approved Self-Healing previews were not reflected in production for the HN collectors.
 - Delete the half-built documentation collector in the Bright Data UI if desired.
 - Rotate the exposed API key, update ignored `.env.local`, and rerun the passing smoke test.
+
+See `docs/brightdata-source-acquisition.md` for the versioned contract, source-selection rules, live inputs, deterministic tests, and gate requirements. No live collector was created, triggered, healed, approved, or scheduled as part of this implementation session.

@@ -3,15 +3,20 @@ import { loadLocalEnv } from './env.mjs';
 
 loadLocalEnv();
 const collectorId = process.env.MEND_X_COLLECTOR_ID;
-const target = process.env.MEND_X_TARGET_URL ?? 'https://beamtx.com/pipeline/';
-if (!process.env.BRIGHTDATA_API_KEY || !collectorId) {
-  console.error('BRIGHTDATA_API_KEY and MEND_X_COLLECTOR_ID are required in ignored .env.local.');
+const target = process.env.MEND_X_TARGET_URL;
+const reason = process.env.MEND_X_HEAL_REASON;
+if (!process.env.BRIGHTDATA_API_KEY || !collectorId || !target || !reason) {
+  console.error('BRIGHTDATA_API_KEY, MEND_X_COLLECTOR_ID, MEND_X_TARGET_URL, and MEND_X_HEAL_REASON are required.');
+  process.exit(2);
+}
+if (process.env.MEND_X_HEAL_APPROVED !== 'true') {
+  console.error('Healing requires an external approval. Set MEND_X_HEAL_APPROVED=true only after the gate is recorded.');
   process.exit(2);
 }
 const prompt = [
-  'The crawler fails before extraction with: tunneling socket could not be established, statusCode=403, error_code=proxy_config.',
-  'Remove unsupported proxy configuration and use the account-compatible default network settings.',
-  'Preserve the existing SERPINA1/AATD output schema and evidence requirements.',
+  `Observed failure: ${reason}`,
+  'Repair retrieval while preserving the current generic pipeline output schema.',
+  'Keep evidence_excerpt verbatim, do not infer missing values, scrape only the supplied public page, and do not follow links.',
 ].join(' ');
 const result = spawnSync(process.execPath, [
   'node_modules/@brightdata/cli/dist/index.js', 'scraper', 'heal', collectorId, prompt,

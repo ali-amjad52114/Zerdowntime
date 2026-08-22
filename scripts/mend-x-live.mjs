@@ -1,59 +1,63 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { loadLocalEnv } from './env.mjs';
-import { runXAxis } from '../src/axes/x-pipeline-adapter.mjs';
+import {
+  createBrightDataAcquisitionRequest,
+  executeBrightDataAdapter,
+  persistBrightDataSourceExecution,
+} from '../src/acquisition/brightdata-source.mjs';
 
 loadLocalEnv();
-const collectorId = process.env.MEND_X_COLLECTOR_ID;
-const target = process.env.MEND_X_TARGET_URL ?? 'https://beamtx.com/pipeline/';
-if (!process.env.BRIGHTDATA_API_KEY || !collectorId) {
-  console.error('BRIGHTDATA_API_KEY and MEND_X_COLLECTOR_ID are required in ignored .env.local.');
+const list = (name) => String(process.env[name] ?? '').split(',').map((value) => value.trim()).filter(Boolean);
+const requiredEnvironment = [
+  'BRIGHTDATA_API_KEY', 'MEND_X_COLLECTOR_ID', 'MEND_X_TARGET_URL',
+  'MEND_DISEASE_RUN_ID', 'MEND_TARGET_RUN_ID', 'MEND_DISEASE_NAME', 'MEND_TARGET_NAME',
+];
+const missing = requiredEnvironment.filter((name) => !process.env[name]);
+if (missing.length) {
+  console.error(`Missing required environment: ${missing.join(', ')}`);
   process.exit(2);
 }
 
-const result = spawnSync(process.execPath, [
-  'node_modules/@brightdata/cli/dist/index.js', 'scraper', 'run', collectorId, target, '--pretty',
+const request = createBrightDataAcquisitionRequest({
+  diseaseRunId: process.env.MEND_DISEASE_RUN_ID,
+  candidateId: process.env.MEND_CANDIDATE_ID,
+  targetRunId: process.env.MEND_TARGET_RUN_ID,
+  disease: { name: process.env.MEND_DISEASE_NAME, aliases: list('MEND_DISEASE_ALIASES') },
+  target: {
+    name: process.env.MEND_TARGET_NAME,
+    aliases: list('MEND_TARGET_ALIASES'),
+    identifiers: { uniprot: process.env.MEND_TARGET_UNIPROT_ID || null },
+  },
+  matchPolicy: process.env.MEND_X_MATCH_POLICY ?? 'disease_or_target',
+  source: {
+    kind: 'scraper_studio_collector', assetId: process.env.MEND_X_COLLECTOR_ID,
+    url: process.env.MEND_X_TARGET_URL,
+    publicSourceApproved: process.env.MEND_X_PUBLIC_SOURCE_APPROVED === 'true',
+  },
+});
+
+const startedAt = new Date().toISOString();
+const cli = spawnSync(process.execPath, [
+  'node_modules/@brightdata/cli/dist/index.js', 'scraper', 'run',
+  request.source.asset_id, request.source.url, '--pretty',
 ], { encoding: 'utf8', env: process.env });
-if (result.stderr) process.stderr.write(result.stderr);
-if (result.error || result.status !== 0) process.exit(result.status ?? 1);
+if (cli.stderr) process.stderr.write(cli.stderr);
+if (cli.error || cli.status !== 0) process.exit(cli.status ?? 1);
 
 let payload;
 try {
-  payload = JSON.parse(result.stdout);
+  payload = JSON.parse(cli.stdout);
 } catch (error) {
   console.error(`Bright Data returned invalid JSON: ${error.message}`);
   process.exit(1);
 }
-
-const rows = (Array.isArray(payload) ? payload : [payload]).flatMap((item) => {
-  if (Array.isArray(item)) return item;
-  for (const key of ['pipeline_items', 'programs', 'results', 'data']) {
-    if (Array.isArray(item?.[key])) return item[key];
-  }
-  return item && typeof item === 'object' ? [item] : [];
+const adapterResult = executeBrightDataAdapter({ request, payload });
+const execution = persistBrightDataSourceExecution({
+  request, payload, adapterResult,
+  executionId: process.env.MEND_SOURCE_EXECUTION_ID ?? randomUUID(),
+  providerRunId: process.env.MEND_X_PROVIDER_RUN_ID || null,
+  startedAt, mode: 'live',
 });
-const targetTerms = /SERPINA1|AATD|alpha[- ]?1|antitrypsin|ARO-AAT|fazirsiran/i;
-const targetRows = rows.filter((row) => targetTerms.test([
-  row?.program,
-  row?.program_name,
-  row?.disease,
-  row?.indication,
-  row?.target_mechanism,
-  row?.mechanism,
-  row?.evidence,
-  row?.evidence_text,
-  row?.evidence_excerpt,
-].filter(Boolean).join(' ')));
-mkdirSync('artifacts/mend', { recursive: true });
-writeFileSync('artifacts/mend/x-brightdata-raw.json', `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
-const run = runXAxis({
-  snapshot: { pipeline_items: targetRows, source_url: target, retrieved_at: new Date().toISOString() },
-  mode: 'normal',
-  adapterVersion: 'v1',
-  validationOptions: { maxMissingRatio: 0.67 },
-});
-process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
-if (run.validation.status !== 'PASS') {
-  console.error(JSON.stringify({ rawKeys: targetRows.map((row) => Object.keys(row ?? {})) }, null, 2));
-  process.exit(1);
-}
+process.stdout.write(`${JSON.stringify({ execution, result: adapterResult }, null, 2)}\n`);
+if (adapterResult.validation.status !== 'PASS') process.exit(1);
