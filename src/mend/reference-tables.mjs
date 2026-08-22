@@ -104,6 +104,28 @@ export const MODALITIES = Object.freeze([
   }),
 ]);
 
+/**
+ * Diagnosed population — the addressable-population anchor for a revenue model.
+ *
+ * Same discipline as COSTS and MODALITIES: cited, order-of-magnitude, not a quote. There is
+ * no free API for this either, so it is transcribed from published epidemiology, not fetched.
+ */
+export const EPIDEMIOLOGY = Object.freeze([
+  Object.freeze({
+    match: /alpha[- ]?1[- ]?antitrypsin|\bAATD\b|alpha[- ]?1 deficiency/i,
+    label: 'Alpha-1 antitrypsin deficiency',
+    severe_deficiency_us: 'approximately 100,000',
+    // The numeric twin of the display string above — same cited figure, usable in arithmetic.
+    // Kept in sync deliberately rather than parsed from the string, so a future edit to one
+    // can't silently desync from the other without a reviewer noticing both lines.
+    severe_deficiency_us_estimate: 100000,
+    basis: 'Severe (PI*ZZ-equivalent) deficiency, US, order-of-magnitude estimate widely cited in AATD epidemiology and patient-advocacy literature',
+    diagnosed_share_note: 'The same literature repeatedly describes severe AATD as substantially underdiagnosed; published estimates of the diagnosed share vary by source and study year rather than converging on one number.',
+    source: 'de Serres FJ, "Worldwide racial and ethnic distribution of alpha1-antitrypsin deficiency," Chest, 2002 (bibliographic citation — this environment has no live network access to resolve a specific article link, so no deep link is asserted); figure is consistent with Alpha-1 Foundation patient-population estimates',
+    source_url: 'https://alpha1.org/',
+  }),
+]);
+
 const CURATED_NOTE = 'Curated reference table, not a live source. Figures are order-of-magnitude and carry their basis and citation.';
 
 /** Cost of the incumbent for a disease, or an explicit statement that there is no curated row. */
@@ -130,6 +152,23 @@ export function costFor(disease) {
       : null,
     note_curated: CURATED_NOTE,
   };
+}
+
+/** Diagnosed-population anchor for a disease, or an explicit statement that there is no curated row. */
+export function epidemiologyFor(disease) {
+  const haystack = String(disease ?? '');
+  const row = EPIDEMIOLOGY.find((entry) => entry.match.test(haystack));
+  if (!row) {
+    return {
+      curated: true,
+      found: false,
+      disease: haystack || null,
+      message: 'No curated epidemiology reference for this disease. Add a row in src/mend/reference-tables.mjs rather than guessing a population.',
+      note: CURATED_NOTE,
+    };
+  }
+  const { match, ...rest } = row;
+  return { curated: true, found: true, disease: haystack, ...rest, note_curated: CURATED_NOTE };
 }
 
 /** Match one reported mechanism to a modality by keyword. An unmatched mechanism stays unmatched. */

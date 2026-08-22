@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { COSTS, MODALITIES, costFor, modalityFor, modalityMix } from '../src/mend/reference-tables.mjs';
+import { COSTS, EPIDEMIOLOGY, MODALITIES, costFor, epidemiologyFor, modalityFor, modalityMix } from '../src/mend/reference-tables.mjs';
 
 test('every curated row carries a basis and a source URL', () => {
   for (const row of COSTS) {
@@ -9,6 +9,11 @@ test('every curated row carries a basis and a source URL', () => {
   }
   for (const row of MODALITIES) {
     assert.ok(row.cmc_notes, `${row.name} needs CMC notes`);
+    assert.match(row.source_url, /^https:\/\//);
+  }
+  for (const row of EPIDEMIOLOGY) {
+    assert.ok(row.basis, `${row.label} needs a basis`);
+    assert.ok(row.source, `${row.label} needs a source`);
     assert.match(row.source_url, /^https:\/\//);
   }
 });
@@ -61,4 +66,22 @@ test('the mix is ordered by count and deterministic', () => {
   const second = modalityMix(['SERPINA1 gene correction', 'SERPINA1 base editing', 'AAT augmentation']);
   assert.deepEqual(first.mix.map((entry) => entry.modality.name), second.mix.map((entry) => entry.modality.name));
   assert.equal(first.mix[0].count, 2);
+});
+
+test('the diagnosed population for AATD is returned with its curated label and basis', () => {
+  const answer = epidemiologyFor('Alpha-1 Antitrypsin Deficiency');
+  assert.equal(answer.found, true);
+  assert.equal(answer.curated, true);
+  assert.equal(answer.severe_deficiency_us, 'approximately 100,000');
+  assert.equal(answer.severe_deficiency_us_estimate, 100000);
+  assert.match(answer.source, /de Serres/);
+  assert.match(answer.source_url, /^https:\/\//);
+});
+
+test('a disease with no curated epidemiology row says so rather than guessing a population', () => {
+  const answer = epidemiologyFor('Some other disease');
+  assert.equal(answer.found, false);
+  assert.equal(answer.curated, true);
+  assert.match(answer.message, /No curated epidemiology reference/);
+  assert.equal(answer.severe_deficiency_us, undefined);
 });
