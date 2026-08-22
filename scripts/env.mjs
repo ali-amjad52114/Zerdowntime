@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-export function loadLocalEnv(path = ".env.local") {
+export function loadLocalEnv(path = ".env.local", options = {}) {
   let contents;
   try {
     contents = readFileSync(path, "utf8");
@@ -22,7 +22,6 @@ export function loadLocalEnv(path = ".env.local") {
     ) {
       value = value.slice(1, -1);
     }
-    if (process.env[name] === undefined) process.env[name] = value;
+    if (options.override || process.env[name] === undefined) process.env[name] = value;
   }
 }
-

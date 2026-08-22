@@ -1,3 +1,7 @@
+import { loadLocalEnv } from './env.mjs';
+
+loadLocalEnv('.env.local', { override: true });
+
 const endpoint = process.env.SIGNOZ_MCP_URL ?? 'https://mcp.us2.signoz.cloud/mcp';
 const apiKey = process.env.SIGNOZ_API_KEY;
 const signozUrl = process.env.SIGNOZ_URL;
@@ -44,7 +48,7 @@ const initialized = await request({
   id: 1,
   method: 'initialize',
   params: {
-    protocolVersion: '2025-06-18',
+    protocolVersion: '2025-11-25',
     capabilities: {},
     clientInfo: { name: 'zero-downtime-smoke', version: '0.1.0' },
   },
@@ -78,6 +82,7 @@ function parseToolJson(text) {
 
 const telemetryProbes = [];
 const verifyRunId = process.env.SIGNOZ_VERIFY_RUN_ID;
+const verifyMetricName = process.env.SIGNOZ_VERIFY_METRIC_NAME ?? 'zero_downtime_runs_total';
 if (verifyRunId) {
   for (const name of ['signoz_aggregate_logs', 'signoz_aggregate_traces']) {
     const response = await request({
@@ -112,7 +117,7 @@ if (verifyRunId) {
     params: {
       name: 'signoz_query_metrics',
       arguments: {
-        metricName: 'zero_downtime_runs_total',
+        metricName: verifyMetricName,
         timeRange: '1h',
         searchContext: `Verify telemetry ingestion for run ${verifyRunId}`,
       },
@@ -128,7 +133,7 @@ if (verifyRunId) {
   if (!(Number(metricRowsScanned) > 0)) throw new Error('signoz_query_metrics found no ingested metric rows');
   telemetryProbes.push({
     tool: 'signoz_query_metrics',
-    metric: 'zero_downtime_runs_total',
+    metric: verifyMetricName,
     rowsScanned: Number(metricRowsScanned),
   });
 }
