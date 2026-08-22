@@ -75,3 +75,8 @@ To send the same telemetry to SigNoz Cloud, put its OTLP endpoint and
 `signoz-ingestion-key=...` header in ignored `.env.local` (see `.env.example`).
 Never commit that file. Stop local SigNoz with `npm run signoz:down`; volumes are
 preserved.
+
+To verify the hosted SigNoz MCP connection, set `SIGNOZ_URL` to the exact
+workspace URL shown in the browser and keep `SIGNOZ_API_KEY` in the user
+environment or ignored `.env.local`, then run `npm run signoz:mcp:smoke`.
+`SIGNOZ_URL` and `SIGNOZ_MCP_URL` are different values.

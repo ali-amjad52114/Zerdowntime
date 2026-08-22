@@ -19,19 +19,23 @@
     }
   },
   "invocationMethod": {
-    "type": "GITHUB",
-    "org": "REPLACE_WITH_GITHUB_ORG",
-    "repo": "REPLACE_WITH_GITHUB_REPO",
-    "workflow": "port-delivery.yml",
-    "workflowInputs": {
-      "operation": "prepare",
-      "port_run_id": "{{ .run.id }}",
-      "workflow_run_id": "{{ .run.id }}",
-      "brief_json": "{{ .inputs | tojson }}",
-      "plan_hash": "",
-      "state_json": ""
-    },
-    "reportWorkflowStatus": true
+    "type": "INTEGRATION_ACTION",
+    "installationId": "github-ocean",
+    "integrationActionType": "dispatch_workflow",
+    "integrationActionExecutionProperties": {
+      "org": "REPLACE_WITH_GITHUB_ORG",
+      "repo": "REPLACE_WITH_GITHUB_REPO",
+      "workflow": "port-delivery.yml",
+      "workflowInputs": {
+        "operation": "prepare",
+        "port_run_id": "{{ .run.id }}",
+        "workflow_run_id": "{{ .run.id }}",
+        "brief_json": "{{ .inputs | tojson }}",
+        "plan_hash": "",
+        "state_json": ""
+      },
+      "reportWorkflowStatus": true
+    }
   },
   "requiredApproval": false,
   "allowAnyoneToViewRuns": true

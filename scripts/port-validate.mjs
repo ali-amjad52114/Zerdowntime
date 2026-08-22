@@ -53,11 +53,20 @@ for (const relative of manifest.actions ?? []) {
   const path = join(root, relative);
   if (!existsSync(path)) { errors.push(`Missing action file: ${path}`); continue; }
   const action = readJson(path);
-  if (!action.identifier || action.trigger?.type !== "self-service" || action.invocationMethod?.type !== "GITHUB") errors.push(`Incomplete self-service action: ${relative}`);
+  const invocation = action.invocationMethod ?? {};
+  const supportedGitHubBackend = invocation.type === "GITHUB" || (
+    invocation.type === "INTEGRATION_ACTION" &&
+    invocation.installationId &&
+    invocation.integrationActionType === "dispatch_workflow"
+  );
+  if (!action.identifier || action.trigger?.type !== "self-service" || !supportedGitHubBackend) errors.push(`Incomplete self-service action: ${relative}`);
   if (actionIds.has(action.identifier)) errors.push(`Duplicate action identifier: ${action.identifier}`);
   actionIds.add(action.identifier);
   if (action.trigger?.blueprintIdentifier && !blueprints.has(action.trigger.blueprintIdentifier)) errors.push(`${action.identifier} targets unknown blueprint`);
-  if (action.invocationMethod?.workflow !== "port-delivery.yml") errors.push(`${action.identifier} targets an unexpected workflow`);
+  const workflow = invocation.type === "INTEGRATION_ACTION"
+    ? invocation.integrationActionExecutionProperties?.workflow
+    : invocation.workflow;
+  if (workflow !== "port-delivery.yml") errors.push(`${action.identifier} targets an unexpected workflow`);
 }
 
 const release = readJson(join(root, "actions/release-change.json"));

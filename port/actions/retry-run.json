@@ -14,19 +14,23 @@
     }
   },
   "invocationMethod": {
-    "type": "GITHUB",
-    "org": "REPLACE_WITH_GITHUB_ORG",
-    "repo": "REPLACE_WITH_GITHUB_REPO",
-    "workflow": "port-delivery.yml",
-    "workflowInputs": {
-      "operation": "retry",
-      "port_run_id": "{{ .run.id }}",
-      "workflow_run_id": "{{ .entity.identifier }}",
-      "brief_json": "{{ .entity.properties.brief | tojson }}",
-      "plan_hash": "{{ .entity.properties.plan_hash }}",
-      "state_json": "{{ .entity.properties | tojson }}"
-    },
-    "reportWorkflowStatus": true
+    "type": "INTEGRATION_ACTION",
+    "installationId": "github-ocean",
+    "integrationActionType": "dispatch_workflow",
+    "integrationActionExecutionProperties": {
+      "org": "REPLACE_WITH_GITHUB_ORG",
+      "repo": "REPLACE_WITH_GITHUB_REPO",
+      "workflow": "port-delivery.yml",
+      "workflowInputs": {
+        "operation": "retry",
+        "port_run_id": "{{ .run.id }}",
+        "workflow_run_id": "{{ .entity.identifier }}",
+        "brief_json": "{{ .entity.properties.brief | tojson }}",
+        "plan_hash": "{{ .entity.properties.plan_hash }}",
+        "state_json": "{{ .entity.properties | tojson }}"
+      },
+      "reportWorkflowStatus": true
+    }
   },
   "requiredApproval": false,
   "allowAnyoneToViewRuns": true
