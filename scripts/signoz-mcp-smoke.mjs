@@ -56,6 +56,21 @@ const listed = await request({ jsonrpc: '2.0', id: 2, method: 'tools/list', para
 if (listed.body?.error) throw new Error(`tools/list failed: ${listed.body.error.message}`);
 
 const tools = listed.body?.result?.tools ?? [];
+const readProbeTool = tools.find((tool) => tool.name === 'signoz_list_dashboards');
+if (!readProbeTool) throw new Error('SigNoz MCP did not expose signoz_list_dashboards');
+
+const probed = await request({
+  jsonrpc: '2.0',
+  id: 3,
+  method: 'tools/call',
+  params: { name: readProbeTool.name, arguments: {} },
+}, initialized.sessionId);
+if (probed.body?.error) throw new Error(`workspace read probe failed: ${probed.body.error.message}`);
+if (probed.body?.result?.isError) {
+  const detail = probed.body.result.content?.map((item) => item.text).filter(Boolean).join(' ') ?? 'unknown error';
+  throw new Error(`workspace read probe failed: ${detail}`);
+}
+
 console.log(JSON.stringify({
   ok: true,
   endpoint,
@@ -64,5 +79,6 @@ console.log(JSON.stringify({
   server: initialized.body?.result?.serverInfo,
   protocolVersion: initialized.body?.result?.protocolVersion,
   toolCount: tools.length,
+  workspaceReadProbe: readProbeTool.name,
   sampleTools: tools.slice(0, 8).map((tool) => tool.name),
 }, null, 2));
