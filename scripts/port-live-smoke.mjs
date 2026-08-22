@@ -31,9 +31,17 @@ const get = async (path) => {
   return body;
 };
 
-for (const identifier of ["zdProject", "zdService", "zdWorkflowRun", "zdDecision"]) {
+for (const identifier of [
+  "zdProject", "zdService", "zdWorkflowRun", "zdDecision", "mendDiseaseRun", "mendCandidateTarget",
+  "mendTargetRun", "mendAxisRun", "mendDiligenceTask", "mendTargetDecision"
+]) {
   const body = await get(`/v1/blueprints/${identifier}`);
   if (body.blueprint?.identifier !== identifier) throw new Error(`Missing blueprint ${identifier}`);
+}
+
+for (const identifier of ["mend_handoff_candidate", "mend_retry_axis", "mend_approve_source_healing", "mend_complete_diligence_task", "mend_record_target_decision"]) {
+  const body = await get(`/v1/actions/${identifier}`);
+  if (body.action?.identifier !== identifier) throw new Error(`Missing action ${identifier}`);
 }
 
 const brief = {

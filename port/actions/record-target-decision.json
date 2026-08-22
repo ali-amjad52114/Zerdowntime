@@ -1,0 +1,31 @@
+{
+  "identifier": "mend_record_target_decision",
+  "title": "Record target decision",
+  "icon": "Checklist",
+  "description": "Records an immutable human proceed, hold, or escalate decision for one target run.",
+  "trigger": {
+    "type": "self-service", "operation": "DAY-2", "blueprintIdentifier": "mendTargetRun",
+    "userInputs": {
+      "properties": {
+        "decision": { "title": "Decision", "type": "string", "enum": ["proceed", "hold", "escalate"] },
+        "rationale": { "title": "Rationale", "type": "string" },
+        "evidence_ids": { "title": "Evidence IDs", "type": "array", "items": { "type": "string" } },
+        "open_risks": { "title": "Open risks", "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["decision", "rationale", "evidence_ids", "open_risks"],
+      "order": ["decision", "rationale", "evidence_ids", "open_risks"]
+    }
+  },
+  "invocationMethod": {
+    "type": "INTEGRATION_ACTION", "installationId": "github-ocean", "integrationActionType": "dispatch_workflow",
+    "integrationActionExecutionProperties": {
+      "org": "REPLACE_WITH_GITHUB_ORG", "repo": "REPLACE_WITH_GITHUB_REPO", "workflow": "port-mend-control.yml",
+      "workflowInputs": {
+        "operation": "record_target_decision", "port_run_id": "{{ .run.id }}", "entity_id": "{{ .entity.identifier }}",
+        "parent_id": "{{ .entity.relations.disease_run }}", "actor": "{{ .run.triggeredBy }}",
+        "payload_json": "{\"decision\":{{ .inputs.decision | tojson }},\"rationale\":{{ .inputs.rationale | tojson }},\"evidence_ids\":{{ .inputs.evidence_ids | tojson }},\"open_risks\":{{ .inputs.open_risks | tojson }},\"expected_status\":\"review\"}"
+      }, "reportWorkflowStatus": true
+    }
+  },
+  "requiredApproval": true, "allowAnyoneToViewRuns": true
+}

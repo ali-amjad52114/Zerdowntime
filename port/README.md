@@ -1,45 +1,95 @@
 # Port integration
 
-This directory is the Git-controlled source of truth for the Port factory control plane. The original product-neutral delivery workflow remains intact, and Mend's constrained SERPINA1/AATD X/Y/Z catalog is layered on top of it.
+This directory is the Git-controlled source of truth for the Port control plane. The original product-neutral delivery regression remains intact, while production Mend entities are disease-first and target-dynamic. SERPINA1/AATD entities are listed only under `manifest.regressionEntities`; `port-sync.mjs` never syncs that collection.
 
 ## Repository artifacts
 
-- `blueprints/` models project context, replaceable services, workflow runs, decisions, the scientific brief, X/Y/Z integrations, generated software changes, and repair requests.
+- `blueprints/` includes the legacy delivery model plus production `mendDiseaseRun`, `mendCandidateTarget`, `mendTargetRun`, `mendAxisRun`, `mendDiligenceTask`, and `mendTargetDecision` contracts.
 - `entities/` seeds goals, constraints, technical choices, risks, and service boundaries.
 - `actions/submit-change.json` starts plan/build/test from a brief.
 - `actions/release-change.json` is a separate day-2 action with `requiredApproval: true`. A Port decline leaves the backend uninvoked.
 - `actions/retry-run.json` reruns the failed stage with the same workflow/correlation identifier.
-- `.github/workflows/port-delivery.yml` is the backend shared by all three actions.
+- `.github/workflows/port-delivery.yml` remains the generic delivery regression backend.
+- `.github/workflows/port-mend-control.yml` invokes the real Mend control adapter and synchronizes returned entities; it does not simulate application success.
 - `scripts/lib/port-workflow.mjs` implements the local state machine and audit trail.
 
-## Mend X/Y/Z control-plane model
+## Disease-first Mend control plane
 
-The active scientific brief is `mendScientificBrief/serpina1-aatd-xyz`. Its three `mendAxisIntegration` entities make X, Y, and Z independently visible, including their source, versioned adapter path, factory version, health state, last record count, and evidence requirement. X explicitly records Bright Data as its acquisition provider.
-
-`mendSoftwareChange` is the human review packet. It requires the proposed factory version, author, Git ref, changed files, test command, structured test evidence, affected integrations, workflow run, and an audit list. A change may be approved through the existing **Approve and release change** action only after the workflow reaches `awaiting_approval`; rejection never invokes the release backend.
-
-`mendRepairRequest` records the isolated X failure without overwriting the healthy dataset. It requires the failed run, previous and current counts, quarantine state, last-known-good state, validation reason, and the repair artifacts the coding agent must produce. The eventual repair change and human `zdDecision` link back to it, preserving the failure-to-recovery audit chain.
-
-Validated payload examples are deliberately not seeded because their workflow IDs, Git evidence, reviewer, and timestamps must come from a real run:
-
-- `fixtures/port/software-change-v1.json`
-- `fixtures/port/x-repair-request.json`
-- `fixtures/port/repair-approval.json`
-
-Replace every `REPLACE_WITH_*` value with evidence from the actual GitHub/Port run before upserting an example. Never mark `candidate-v1` as deployed or an integration as healthy merely because its repository tests pass; those state transitions require the live approval and runtime evidence described in the critical-slice spec.
-
-The repeatable state path is:
+The production graph is:
 
 ```text
-brief -> plan -> build -> test -> awaiting_approval -> release -> audit
-                         |                |
-                         v                v
-                 retry_pending        rejected
-                         |
-              retry or escalated
+mendDiseaseRun
+  -> mendCandidateTarget
+    -> [human-approved handoff]
+      -> mendTargetRun
+        -> independent mendAxisRun (X/Y/Z)
+        -> mendDiligenceTask
+        -> immutable mendTargetDecision
 ```
 
-A changed brief increments `requirement_revision`, derives a new plan and hash, reruns verification, and records `plan_revised`; it does not replay a fixed plan.
+`mendDiseaseRun` intentionally has no target property. Candidate evidence IDs and contradictory counts are retained before handoff. Every axis and task has exactly one target-run owner, preventing multi-target overwrites. Decisions require a rationale, evidence IDs, open risks, actor, and timestamp.
+
+Port exposes five Mend actions:
+
+| Action | Target | Manual approval | Mend operation |
+|---|---|---:|---|
+| Approve candidate and start diligence | candidate | yes | `handoff_candidate` |
+| Retry failed Mend axis | axis run | no | `retry_axis` |
+| Approve source healing | axis run | yes | `approve_source_healing` |
+| Complete diligence task | task | no | `complete_diligence_task` |
+| Record target decision | target run | yes | `record_target_decision` |
+
+All five dispatch `port-mend-control.yml`. That workflow sends `POST /api/port/actions` with `Authorization: Bearer <MEND_PORT_ACTION_TOKEN>` and `Idempotency-Key: <Port action run ID>`. The JSON envelope is:
+
+```json
+{
+  "contract_version": "mend.port-control/v1",
+  "action": "handoff_candidate",
+  "idempotency_key": "port-action-run-id",
+  "port_run_id": "port-action-run-id",
+  "actor": "human-actor",
+  "requested_at": "ISO-8601",
+  "correlation": {
+    "port.run.id": "port-action-run-id",
+    "candidate.id": "candidate-id",
+    "disease.run.id": "disease-run-id"
+  },
+  "resource": {
+    "type": "candidate_target",
+    "id": "candidate-id",
+    "parent_id": "disease-run-id"
+  },
+  "input": {
+    "axes": ["X", "Y", "Z"],
+    "selection_reason": "source-linked rationale",
+    "expected_selection_status": "pending"
+  }
+}
+```
+
+Operation-specific `input` contracts are:
+
+- `handoff_candidate`: `axes`, `selection_reason`, `expected_selection_status=pending`.
+- `retry_axis`: `reason`, `expected_status=failed`, `expected_retry_count`.
+- `approve_source_healing`: `source_execution_id`, `healing_request_id`, `reason`, `evidence_url`, `expected_status=healing_pending`.
+- `complete_diligence_task`: `finding`, `outcome`, nonempty `evidence_ids`, `expected_status=open`.
+- `record_target_decision`: `decision`, `rationale`, nonempty `evidence_ids`, `open_risks`, `expected_status=review`.
+
+Mend must respond with the same contract and Port run ID, a durable action execution ID, a terminal/accepted status, and normalized Port entities:
+
+```json
+{
+  "contract_version": "mend.port-control/v1",
+  "port_run_id": "port-action-run-id",
+  "action_execution_id": "mend-action-id",
+  "status": "accepted",
+  "port_entities": [
+    { "blueprint": "mendTargetRun", "entity": { "identifier": "target-run-id", "properties": {}, "relations": {} } }
+  ]
+}
+```
+
+The adapter rejects mismatched correlation IDs, invalid state preconditions, invalid evidence payloads, and blueprints outside the controlled manifest. Returned entities are attached to the Port action run during upsert.
 
 ## Credential-free smoke test (validated locally)
 
@@ -85,13 +135,27 @@ Compare the two `plan_hash` values in command output and inspect the `plan_revis
 1. Install Port's GitHub integration for the repository and permit it to dispatch `.github/workflows/port-delivery.yml`.
 2. In ignored `.env.local`, set `PORT_CLIENT_ID`, `PORT_CLIENT_SECRET`, `PORT_GITHUB_ORG`, and `PORT_GITHUB_REPO`. Use `PORT_API_URL=https://api.us.port.io` for a US-region account; the default is the EU API.
 3. Add `PORT_CLIENT_ID` and `PORT_CLIENT_SECRET` as GitHub Actions repository secrets. Do not put their values in Port JSON, workflow inputs, logs, or commits.
-4. Run `npm run port:validate`, then `npm run port:sync -- --live`. The sync creates or replaces the eight blueprints, seed entities, and three generic workflow actions. Re-running it is idempotent. Validated example payloads are not automatically synced.
-5. Restrict action execution/approval RBAC in Port to the intended teams or users. Assign approvers to `zd_release_change`; its repository definition enforces manual approval and disables outbound approval notifications.
-6. After each real build or repair workflow, upsert the corresponding software-change, repair-request, and decision payloads using the action run ID for correlation. Attach the Git compare/commit URL and GitHub test artifact before requesting approval.
+4. Also configure GitHub secrets `MEND_API_URL` and `MEND_PORT_ACTION_TOKEN` for the control adapter. They are never placed in a Port entity or workflow input.
+5. Run `npm run port:validate`, then `npm run port:sync -- --live`. The sync creates or replaces the fourteen blueprints, production-safe seed entities, three generic delivery actions, and five Mend control actions. Re-running it is idempotent. Regression entities and validated examples are not automatically synced.
+6. Restrict action execution/approval RBAC in Port to intended teams or users. Candidate handoff, source healing, target decisions, and generic release require manual approval.
+7. After each real action, retain the Port action run ID, Mend `action_execution_id`, GitHub run URL, affected entity IDs, and redacted request/result artifact.
 
 If API sync is unavailable, create the blueprints in manifest order, then seed entities, then create the actions by pasting their JSON in Port. Replace the two `REPLACE_WITH_GITHUB_*` values when using this manual route.
 
 ## Connected smoke test (user-required)
+
+The G3 Port gate is not satisfied by catalog sync or a CLI exit code. Retain screenshots or API output proving all of the following against the live account:
+
+1. All six production Mend blueprints and five actions exist with expected RBAC.
+2. A real evidence-derived candidate entity relates to its disease run.
+3. Candidate handoff is manually approved and creates a distinct real `mendTargetRun` through Mend.
+4. A failed real axis can be retried without changing its target owner; attempt history is retained.
+5. A pending real source-healing request cannot run before Port approval.
+6. A diligence finding and final decision synchronize back with evidence IDs and actor.
+7. Port action run ID, GitHub workflow run, Mend action execution ID, and resulting entity IDs correlate.
+8. A rejected manual action does not call Mend.
+
+The generic delivery regression can still be checked separately:
 
 1. Run **Submit brief or change** with the values from `fixtures/port/brief.json`.
 2. Confirm its GitHub run passes validation/build/test and the resulting `zdWorkflowRun` entity is `awaiting_approval` with a matching correlation ID and attached Port action-run history.

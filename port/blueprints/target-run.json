@@ -1,0 +1,25 @@
+{
+  "identifier": "mendTargetRun",
+  "title": "Mend Target Run",
+  "icon": "Flask",
+  "description": "An independently owned diligence execution created from one human-selected candidate.",
+  "schema": {
+    "properties": {
+      "target_name": { "title": "Target name", "type": "string" },
+      "canonical_symbol": { "title": "Canonical symbol", "type": "string" },
+      "uniprot_id": { "title": "UniProt ID", "type": "string" },
+      "status": { "title": "Status", "type": "string", "enum": ["queued", "running", "review", "partial_failure", "failed", "complete", "decided"] },
+      "requested_axes": { "title": "Requested axes", "type": "array", "items": { "type": "string", "enum": ["X", "Y", "Z"] } },
+      "created_at": { "title": "Created at", "type": "string", "format": "date-time" },
+      "updated_at": { "title": "Updated at", "type": "string", "format": "date-time" },
+      "correlation_id": { "title": "Correlation ID", "type": "string" },
+      "contract_version": { "title": "Contract version", "type": "string" }
+    },
+    "required": ["target_name", "status", "requested_axes", "created_at", "updated_at", "correlation_id", "contract_version"]
+  },
+  "mirrorProperties": {}, "calculationProperties": {}, "aggregationProperties": {},
+  "relations": {
+    "disease_run": { "title": "Disease run", "target": "mendDiseaseRun", "required": true, "many": false },
+    "candidate": { "title": "Selected candidate", "target": "mendCandidateTarget", "required": true, "many": false }
+  }
+}

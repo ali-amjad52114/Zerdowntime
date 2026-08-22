@@ -59,6 +59,16 @@ for (const entry of manifest.entities ?? []) {
   for (const entity of Array.isArray(data) ? data : [data]) validateEntity(entity, blueprint, entry.file);
 }
 
+for (const entry of manifest.regressionEntities ?? []) {
+  const path = join(root, entry.file);
+  if (entry.fixtureOnly !== true) errors.push(`Regression entity '${entry.file}' must declare fixtureOnly=true`);
+  if (!existsSync(path)) { errors.push(`Missing regression entity file: ${path}`); continue; }
+  const blueprint = blueprints.get(entry.blueprint);
+  if (!blueprint) { errors.push(`Regression entity targets unknown blueprint '${entry.blueprint}'`); continue; }
+  const data = readJson(path);
+  for (const entity of Array.isArray(data) ? data : [data]) validateEntity(entity, blueprint, entry.file);
+}
+
 for (const entry of manifest.examples ?? []) {
   const path = join(root, entry.file);
   if (!existsSync(path)) { errors.push(`Missing example file: ${path}`); continue; }
@@ -86,17 +96,32 @@ for (const relative of manifest.actions ?? []) {
   const workflow = invocation.type === "INTEGRATION_ACTION"
     ? invocation.integrationActionExecutionProperties?.workflow
     : invocation.workflow;
-  if (workflow !== "port-delivery.yml") errors.push(`${action.identifier} targets an unexpected workflow`);
+  const expectedWorkflow = action.identifier.startsWith("mend_") ? "port-mend-control.yml" : "port-delivery.yml";
+  if (workflow !== expectedWorkflow) errors.push(`${action.identifier} targets '${workflow}', expected '${expectedWorkflow}'`);
+  if (expectedWorkflow === "port-mend-control.yml") {
+    const inputs = invocation.integrationActionExecutionProperties?.workflowInputs ?? {};
+    for (const required of ["operation", "port_run_id", "entity_id", "parent_id", "actor", "payload_json"]) {
+      if (!inputs[required]) errors.push(`${action.identifier} omits workflow input '${required}'`);
+    }
+  }
 }
 
 const release = readJson(join(root, "actions/release-change.json"));
 if (release.requiredApproval !== true) errors.push("Release action must require Port manual approval.");
 const submit = readJson(join(root, "actions/submit-change.json"));
 if (submit.requiredApproval !== false) errors.push("Submit action must run without release approval.");
+for (const identifier of ["mend_handoff_candidate", "mend_approve_source_healing", "mend_record_target_decision"]) {
+  const relative = manifest.actions.find((path) => readJson(join(root, path)).identifier === identifier);
+  if (!relative || readJson(join(root, relative)).requiredApproval !== true) errors.push(`${identifier} must require Port manual approval.`);
+}
+
+const productionEntityText = (manifest.entities ?? []).map((entry) => readFileSync(join(root, entry.file), "utf8")).join("\n");
+if (/SERPINA1|AATD|P01009/i.test(productionEntityText)) errors.push("Fixed SERPINA1/AATD values are forbidden in production seed entities.");
 
 const serialized = [
   ...manifest.blueprints.map((path) => readFileSync(join(root, path), "utf8")),
   ...manifest.entities.map((entry) => readFileSync(join(root, entry.file), "utf8")),
+  ...(manifest.regressionEntities ?? []).map((entry) => readFileSync(join(root, entry.file), "utf8")),
   ...manifest.actions.map((path) => readFileSync(join(root, path), "utf8"))
 ].join("\n");
 if (/(client[_-]?secret|api[_-]?key)["']?\s*[:=]\s*["'][^"']{8,}/i.test(serialized)) errors.push("Possible credential found in Port artifacts.");
@@ -105,4 +130,4 @@ if (errors.length) {
   console.error(errors.map((error) => `- ${error}`).join("\n"));
   process.exit(1);
 }
-console.log(`Port validation passed: ${blueprints.size} blueprints, ${manifest.entities.length} seed entity files, ${(manifest.examples ?? []).length} validated examples, ${actionIds.size} actions.`);
+console.log(`Port validation passed: ${blueprints.size} blueprints, ${manifest.entities.length} production seed files, ${(manifest.regressionEntities ?? []).length} isolated regression entity files, ${(manifest.examples ?? []).length} validated examples, ${actionIds.size} actions.`);

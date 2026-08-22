@@ -1,0 +1,25 @@
+{
+  "identifier": "mend_retry_axis",
+  "title": "Retry failed Mend axis",
+  "icon": "Refresh",
+  "description": "Retries only this failed axis while preserving its target-run ownership and bounded attempt history.",
+  "trigger": {
+    "type": "self-service", "operation": "DAY-2", "blueprintIdentifier": "mendAxisRun",
+    "userInputs": {
+      "properties": { "reason": { "title": "Retry reason", "type": "string" } },
+      "required": ["reason"], "order": ["reason"]
+    }
+  },
+  "invocationMethod": {
+    "type": "INTEGRATION_ACTION", "installationId": "github-ocean", "integrationActionType": "dispatch_workflow",
+    "integrationActionExecutionProperties": {
+      "org": "REPLACE_WITH_GITHUB_ORG", "repo": "REPLACE_WITH_GITHUB_REPO", "workflow": "port-mend-control.yml",
+      "workflowInputs": {
+        "operation": "retry_axis", "port_run_id": "{{ .run.id }}", "entity_id": "{{ .entity.identifier }}",
+        "parent_id": "{{ .entity.relations.target_run }}", "actor": "{{ .run.triggeredBy }}",
+        "payload_json": "{\"reason\":{{ .inputs.reason | tojson }},\"expected_status\":\"failed\",\"expected_retry_count\":{{ .entity.properties.retry_count }}}"
+      }, "reportWorkflowStatus": true
+    }
+  },
+  "requiredApproval": false, "allowAnyoneToViewRuns": true
+}

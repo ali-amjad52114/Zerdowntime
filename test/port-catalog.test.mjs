@@ -10,7 +10,9 @@ const blueprint = (identifier) => {
   return read(`port/${file}`);
 };
 
-test("Port catalog models the constrained SERPINA1 X/Y/Z brief", () => {
+test("fixed SERPINA1 X/Y/Z entities are isolated as regression-only", () => {
+  assert.ok(!manifest.entities.some((entry) => /serpina1|xyz-integrations/i.test(entry.file)));
+  assert.ok(manifest.regressionEntities.every((entry) => entry.fixtureOnly === true));
   const brief = read("port/entities/serpina1-brief.json");
   assert.deepEqual(brief.properties.axes, ["X", "Y", "Z"]);
   assert.match(brief.properties.disease, /AATD/);

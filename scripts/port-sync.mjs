@@ -13,10 +13,11 @@ const live = args.has("--live");
 const root = "port";
 const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
 const runtimeFile = valueAfter("--run-file");
+const mendResultFile = valueAfter("--mend-result-file");
 const portRunId = valueAfter("--port-run-id");
 
 if (!live) {
-  console.log(`Port sync dry run: ${manifest.blueprints.length} blueprints, ${manifest.entities.length} entity files, ${manifest.actions.length} actions${runtimeFile ? ", 1 runtime entity" : ""}.`);
+  console.log(`Port sync dry run: ${manifest.blueprints.length} blueprints, ${manifest.entities.length} production seed files, ${manifest.actions.length} actions${runtimeFile ? ", 1 delivery runtime entity" : ""}${mendResultFile ? ", Mend result entities requested" : ""}.`);
   console.log("No account changes made. Add --live only after configuring Port and GitHub environment values.");
   process.exit(0);
 }
@@ -76,4 +77,19 @@ if (runtimeFile) {
   const result = await raw(`/v1/blueprints/zdWorkflowRun/entities?upsert=true${query}`, { method: "POST", headers, body: JSON.stringify(entity) });
   if (!result.response.ok) throw new Error(`Could not sync workflow run ${state.id} (${result.response.status}): ${result.body.message ?? JSON.stringify(result.body)}`);
   console.log(`Synced workflow run ${state.id}.`);
+}
+if (mendResultFile) {
+  const artifact = JSON.parse(readFileSync(mendResultFile, "utf8"));
+  if (artifact.mode !== "live" || !Array.isArray(artifact.result?.port_entities)) throw new Error("Mend result file must contain a validated live result with port_entities.");
+  for (const entry of artifact.result.port_entities) {
+    if (!manifest.blueprints.some((relative) => JSON.parse(readFileSync(join(root, relative), "utf8")).identifier === entry.blueprint)) {
+      throw new Error(`Mend result targets blueprint '${entry.blueprint}' outside the controlled manifest.`);
+    }
+    const query = portRunId ? `&run_id=${encodeURIComponent(portRunId)}` : "";
+    const result = await raw(`/v1/blueprints/${encodeURIComponent(entry.blueprint)}/entities?upsert=true${query}`, {
+      method: "POST", headers, body: JSON.stringify(entry.entity)
+    });
+    if (!result.response.ok) throw new Error(`Could not sync Mend entity ${entry.entity.identifier} (${result.response.status}): ${result.body.message ?? JSON.stringify(result.body)}`);
+    console.log(`Synced Mend entity ${entry.entity.identifier}.`);
+  }
 }

@@ -1,0 +1,49 @@
+name: Port Mend control
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation: { description: "Mend control operation", required: true, type: string }
+      port_run_id: { description: "Port action run ID and idempotency key", required: true, type: string }
+      entity_id: { description: "Target Port/Mend resource ID", required: true, type: string }
+      parent_id: { description: "Owning disease or target run ID", required: true, type: string }
+      actor: { description: "Human actor recorded by Port", required: true, type: string }
+      payload_json: { description: "Versioned operation payload", required: true, type: string }
+
+jobs:
+  mend-control:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      MEND_API_URL: ${{ secrets.MEND_API_URL }}
+      MEND_PORT_ACTION_TOKEN: ${{ secrets.MEND_PORT_ACTION_TOKEN }}
+      PORT_CLIENT_ID: ${{ secrets.PORT_CLIENT_ID }}
+      PORT_CLIENT_SECRET: ${{ secrets.PORT_CLIENT_SECRET }}
+      PORT_GITHUB_ORG: ${{ github.repository_owner }}
+      PORT_GITHUB_REPO: ${{ github.event.repository.name }}
+      RESULT_FILE: artifacts/port/mend-action-${{ inputs.port_run_id }}.json
+      PORT_MEND_OPERATION: ${{ inputs.operation }}
+      PORT_MEND_RUN_ID: ${{ inputs.port_run_id }}
+      PORT_MEND_ENTITY_ID: ${{ inputs.entity_id }}
+      PORT_MEND_PARENT_ID: ${{ inputs.parent_id }}
+      PORT_MEND_ACTOR: ${{ inputs.actor }}
+      PORT_MEND_PAYLOAD_JSON: ${{ inputs.payload_json }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run port:validate
+      - name: Invoke the real Mend control adapter
+        run: node scripts/port-mend-action.mjs --live --output "$RESULT_FILE"
+      - name: Synchronize returned Mend entities into Port
+        run: node scripts/port-sync.mjs --live --mend-result-file "$RESULT_FILE" --port-run-id "${{ inputs.port_run_id }}"
+      - name: Preserve redacted action/result contract evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: port-mend-action-${{ inputs.port_run_id }}
+          path: ${{ env.RESULT_FILE }}

@@ -1,0 +1,31 @@
+{
+  "identifier": "mend_approve_source_healing",
+  "title": "Approve source healing",
+  "icon": "Repair",
+  "description": "Human approval for a proposed Bright Data/source-adapter healing attempt; never approves the healed output as scientifically valid.",
+  "trigger": {
+    "type": "self-service", "operation": "DAY-2", "blueprintIdentifier": "mendAxisRun",
+    "userInputs": {
+      "properties": {
+        "source_execution_id": { "title": "Source execution ID", "type": "string" },
+        "healing_request_id": { "title": "Healing request ID", "type": "string" },
+        "reason": { "title": "Approval reason", "type": "string" },
+        "evidence_url": { "title": "Proposed-change evidence", "type": "string", "format": "url" }
+      },
+      "required": ["source_execution_id", "healing_request_id", "reason", "evidence_url"],
+      "order": ["source_execution_id", "healing_request_id", "reason", "evidence_url"]
+    }
+  },
+  "invocationMethod": {
+    "type": "INTEGRATION_ACTION", "installationId": "github-ocean", "integrationActionType": "dispatch_workflow",
+    "integrationActionExecutionProperties": {
+      "org": "REPLACE_WITH_GITHUB_ORG", "repo": "REPLACE_WITH_GITHUB_REPO", "workflow": "port-mend-control.yml",
+      "workflowInputs": {
+        "operation": "approve_source_healing", "port_run_id": "{{ .run.id }}", "entity_id": "{{ .entity.identifier }}",
+        "parent_id": "{{ .entity.relations.target_run }}", "actor": "{{ .run.triggeredBy }}",
+        "payload_json": "{\"source_execution_id\":{{ .inputs.source_execution_id | tojson }},\"healing_request_id\":{{ .inputs.healing_request_id | tojson }},\"reason\":{{ .inputs.reason | tojson }},\"evidence_url\":{{ .inputs.evidence_url | tojson }},\"expected_status\":\"healing_pending\"}"
+      }, "reportWorkflowStatus": true
+    }
+  },
+  "requiredApproval": true, "allowAnyoneToViewRuns": true
+}

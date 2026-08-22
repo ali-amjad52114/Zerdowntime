@@ -1,0 +1,20 @@
+{
+  "identifier": "mendTargetDecision",
+  "title": "Mend Target Decision",
+  "icon": "Checklist",
+  "description": "An immutable human proceed, hold, or escalate decision for one target run.",
+  "schema": {
+    "properties": {
+      "decision": { "title": "Decision", "type": "string", "enum": ["proceed", "hold", "escalate"] },
+      "actor": { "title": "Actor", "type": "string" },
+      "rationale": { "title": "Rationale", "type": "string" },
+      "evidence_ids": { "title": "Evidence IDs", "type": "array", "items": { "type": "string" } },
+      "open_risks": { "title": "Open risks", "type": "array", "items": { "type": "string" } },
+      "recorded_at": { "title": "Recorded at", "type": "string", "format": "date-time" },
+      "contract_version": { "title": "Contract version", "type": "string" }
+    },
+    "required": ["decision", "actor", "rationale", "evidence_ids", "open_risks", "recorded_at", "contract_version"]
+  },
+  "mirrorProperties": {}, "calculationProperties": {}, "aggregationProperties": {},
+  "relations": { "target_run": { "title": "Target run", "target": "mendTargetRun", "required": true, "many": false } }
+}

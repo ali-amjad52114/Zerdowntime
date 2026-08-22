@@ -1,0 +1,29 @@
+{
+  "identifier": "mend_complete_diligence_task",
+  "title": "Complete diligence task",
+  "icon": "Task",
+  "description": "Records a human finding, outcome, and evidence references on one target-owned review task.",
+  "trigger": {
+    "type": "self-service", "operation": "DAY-2", "blueprintIdentifier": "mendDiligenceTask",
+    "userInputs": {
+      "properties": {
+        "finding": { "title": "Finding", "type": "string" },
+        "outcome": { "title": "Outcome", "type": "string", "enum": ["supports", "contradicts", "inconclusive", "escalate"] },
+        "evidence_ids": { "title": "Evidence IDs", "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["finding", "outcome", "evidence_ids"], "order": ["finding", "outcome", "evidence_ids"]
+    }
+  },
+  "invocationMethod": {
+    "type": "INTEGRATION_ACTION", "installationId": "github-ocean", "integrationActionType": "dispatch_workflow",
+    "integrationActionExecutionProperties": {
+      "org": "REPLACE_WITH_GITHUB_ORG", "repo": "REPLACE_WITH_GITHUB_REPO", "workflow": "port-mend-control.yml",
+      "workflowInputs": {
+        "operation": "complete_diligence_task", "port_run_id": "{{ .run.id }}", "entity_id": "{{ .entity.identifier }}",
+        "parent_id": "{{ .entity.relations.target_run }}", "actor": "{{ .run.triggeredBy }}",
+        "payload_json": "{\"finding\":{{ .inputs.finding | tojson }},\"outcome\":{{ .inputs.outcome | tojson }},\"evidence_ids\":{{ .inputs.evidence_ids | tojson }},\"expected_status\":\"open\"}"
+      }, "reportWorkflowStatus": true
+    }
+  },
+  "requiredApproval": false, "allowAnyoneToViewRuns": true
+}

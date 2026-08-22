@@ -1,0 +1,28 @@
+{
+  "identifier": "mend_handoff_candidate",
+  "title": "Approve candidate and start diligence",
+  "icon": "Target",
+  "description": "Human gate that hands one evidence-derived candidate to independent target diligence.",
+  "trigger": {
+    "type": "self-service", "operation": "DAY-2", "blueprintIdentifier": "mendCandidateTarget",
+    "userInputs": {
+      "properties": {
+        "axes": { "title": "Axes", "type": "array", "items": { "type": "string", "enum": ["X", "Y", "Z"] }, "default": ["X", "Y", "Z"] },
+        "selection_reason": { "title": "Selection reason", "type": "string" }
+      },
+      "required": ["axes", "selection_reason"], "order": ["axes", "selection_reason"]
+    }
+  },
+  "invocationMethod": {
+    "type": "INTEGRATION_ACTION", "installationId": "github-ocean", "integrationActionType": "dispatch_workflow",
+    "integrationActionExecutionProperties": {
+      "org": "REPLACE_WITH_GITHUB_ORG", "repo": "REPLACE_WITH_GITHUB_REPO", "workflow": "port-mend-control.yml",
+      "workflowInputs": {
+        "operation": "handoff_candidate", "port_run_id": "{{ .run.id }}", "entity_id": "{{ .entity.identifier }}",
+        "parent_id": "{{ .entity.relations.disease_run }}", "actor": "{{ .run.triggeredBy }}",
+        "payload_json": "{\"axes\":{{ .inputs.axes | tojson }},\"selection_reason\":{{ .inputs.selection_reason | tojson }},\"expected_selection_status\":\"pending\"}"
+      }, "reportWorkflowStatus": true
+    }
+  },
+  "requiredApproval": true, "allowAnyoneToViewRuns": true
+}

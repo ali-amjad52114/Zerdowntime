@@ -1,0 +1,22 @@
+{
+  "identifier": "mendDiseaseRun",
+  "title": "Mend Disease Research Run",
+  "icon": "Search",
+  "description": "One disease-only research execution. Targets are discovered from evidence and are never an input to this entity.",
+  "schema": {
+    "properties": {
+      "disease": { "title": "Disease", "type": "string" },
+      "status": { "title": "Status", "type": "string", "enum": ["queued", "researching", "candidate_review", "handed_off", "partial_failure", "failed", "complete"] },
+      "corpus_document_count": { "title": "Corpus documents", "type": "number" },
+      "candidate_count": { "title": "Candidate count", "type": "number" },
+      "source_execution_ids": { "title": "Source execution IDs", "type": "array", "items": { "type": "string" } },
+      "created_at": { "title": "Created at", "type": "string", "format": "date-time" },
+      "updated_at": { "title": "Updated at", "type": "string", "format": "date-time" },
+      "provenance_url": { "title": "Provenance URL", "type": "string", "format": "url" },
+      "contract_version": { "title": "Contract version", "type": "string" }
+    },
+    "required": ["disease", "status", "corpus_document_count", "candidate_count", "source_execution_ids", "created_at", "updated_at", "contract_version"]
+  },
+  "mirrorProperties": {}, "calculationProperties": {}, "aggregationProperties": {},
+  "relations": { "project": { "title": "Project", "target": "zdProject", "required": true, "many": false } }
+}

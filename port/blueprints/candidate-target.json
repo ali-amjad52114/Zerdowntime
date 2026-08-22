@@ -1,0 +1,24 @@
+{
+  "identifier": "mendCandidateTarget",
+  "title": "Mend Candidate Target",
+  "icon": "Target",
+  "description": "A source-derived candidate awaiting an explicit human handoff decision.",
+  "schema": {
+    "properties": {
+      "display_name": { "title": "Display name", "type": "string" },
+      "canonical_symbol": { "title": "Canonical symbol", "type": "string" },
+      "uniprot_id": { "title": "UniProt ID", "type": "string" },
+      "ranking_score": { "title": "Ranking score", "type": "number" },
+      "supporting_evidence_count": { "title": "Supporting evidence", "type": "number" },
+      "contradictory_evidence_count": { "title": "Contradictory evidence", "type": "number" },
+      "evidence_ids": { "title": "Evidence IDs", "type": "array", "items": { "type": "string" } },
+      "selection_status": { "title": "Selection status", "type": "string", "enum": ["pending", "selected", "rejected", "handed_off"] },
+      "selected_by": { "title": "Selected by", "type": "string" },
+      "selected_at": { "title": "Selected at", "type": "string", "format": "date-time" },
+      "contract_version": { "title": "Contract version", "type": "string" }
+    },
+    "required": ["display_name", "ranking_score", "supporting_evidence_count", "contradictory_evidence_count", "evidence_ids", "selection_status", "contract_version"]
+  },
+  "mirrorProperties": {}, "calculationProperties": {}, "aggregationProperties": {},
+  "relations": { "disease_run": { "title": "Disease run", "target": "mendDiseaseRun", "required": true, "many": false } }
+}

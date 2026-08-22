@@ -23,7 +23,7 @@
     "brightdata:run": "node scripts/brightdata-run.mjs",
     "brightdata:smoke": "node scripts/brightdata-smoke.mjs",
     "port:validate": "node scripts/port-validate.mjs",
-    "port:test": "node --test test/port-workflow.test.mjs",
+    "port:test": "node --test test/port-catalog.test.mjs test/port-workflow.test.mjs test/port-mend-control.test.mjs",
     "port:smoke": "npm run port:validate && npm run port:test",
     "port:prepare": "node scripts/port-workflow.mjs prepare --brief fixtures/port/brief.json --run-id local-demo",
     "port:release": "node scripts/port-workflow.mjs release --run-id local-demo --decision approve --actor local-reviewer",

@@ -1,0 +1,23 @@
+{
+  "identifier": "mendDiligenceTask",
+  "title": "Mend Diligence Task",
+  "icon": "Task",
+  "description": "Human review work with retained findings and evidence references.",
+  "schema": {
+    "properties": {
+      "task_type": { "title": "Task type", "type": "string", "enum": ["competitive_program", "structural_opportunity", "patent_triage", "compound_review", "contradiction_review"] },
+      "title": { "title": "Title", "type": "string" },
+      "status": { "title": "Status", "type": "string", "enum": ["open", "in_progress", "completed", "blocked"] },
+      "assignee": { "title": "Assignee", "type": "string" },
+      "finding": { "title": "Finding", "type": "string" },
+      "outcome": { "title": "Outcome", "type": "string", "enum": ["supports", "contradicts", "inconclusive", "escalate"] },
+      "evidence_ids": { "title": "Evidence IDs", "type": "array", "items": { "type": "string" } },
+      "completed_by": { "title": "Completed by", "type": "string" },
+      "completed_at": { "title": "Completed at", "type": "string", "format": "date-time" },
+      "contract_version": { "title": "Contract version", "type": "string" }
+    },
+    "required": ["task_type", "title", "status", "evidence_ids", "contract_version"]
+  },
+  "mirrorProperties": {}, "calculationProperties": {}, "aggregationProperties": {},
+  "relations": { "target_run": { "title": "Target run", "target": "mendTargetRun", "required": true, "many": false } }
+}
