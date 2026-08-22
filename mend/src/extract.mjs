@@ -10,7 +10,7 @@
 import { createHash } from 'node:crypto';
 import { extract as extractCore, hashInputs } from './extract-core.mjs';
 
-export { CONFIGS, ROUTE, HARD_NEGATIVES, computeSignals, classify, hashInputs } from './extract-core.mjs';
+export { CONFIGS, ROUTE, HARD_NEGATIVES, computeSignals, classify, hashInputs, eachRow } from './extract-core.mjs';
 
 /** sha256(input) truncated to 16 hex chars, per contracts/record.schema.json. */
 export function recordId(sourceUrl, label) {
