@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/server.mjs",
     "mend:demo": "node scripts/mend-demo.mjs",
+    "mend:site": "node scripts/mend-site.mjs",
     "mend:live:structured": "node scripts/mend-live-structured.mjs",
     "mend:telemetry:smoke": "node scripts/mend-telemetry-smoke.mjs",
     "mend:x:create": "node scripts/mend-x-create.mjs",

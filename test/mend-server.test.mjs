@@ -21,7 +21,9 @@ test('Mend API and target view expose healthy, isolated X failure, and v2 recove
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode, runId }),
   });
 
-  assert.equal((await fetch(`${base}/mend`)).status, 404);
+  const empty = await fetch(`${base}/mend`);
+  assert.equal(empty.status, 404);
+  assert.match(await empty.text(), /No run yet/);
   const healthy = await (await run('normal', 'api-mend-healthy')).json();
   assert.equal(healthy.status, 'HEALTHY');
   assert.equal(healthy.axes.X.records.length, 8);
@@ -39,8 +41,12 @@ test('Mend API and target view expose healthy, isolated X failure, and v2 recove
   assert.equal(view.status, 200);
   const html = await view.text();
   assert.match(html, /SERPINA1/);
-  assert.match(html, /X — PIPELINE/);
-  assert.match(html, /Y — STRUCTURE/);
-  assert.match(html, /Z — IP ACTIVITY/);
-  assert.match(html, /Factory v2 · HEALTHY/);
+  assert.match(html, /X — Pipeline activity/);
+  assert.match(html, /Y — Structural readiness/);
+  assert.match(html, /Z — IP activity/);
+  assert.match(html, /factory v2 · PUBLISHED/);
+  assert.match(html, /HEALTHY/);
+
+  const before = await fetch(`${base}/mend`, { headers: { accept: 'text/html' } });
+  assert.equal(before.headers.get('content-type'), 'text/html; charset=utf-8');
 });

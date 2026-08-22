@@ -8,7 +8,7 @@ import { runPipeline } from './pipeline.mjs';
 import { normalizeWebRecords } from './records.mjs';
 import { createDemoAxisRunners } from './mend/demo.mjs';
 import { healthySnapshot, runVerticalSlice } from './mend/vertical-slice.mjs';
-import { renderTargetView } from './mend/ui.mjs';
+import { renderEmptyView, renderTargetView } from './mend/ui.mjs';
 
 const fallbackFixture = [{ title: 'Product-neutral smoke record', url: 'https://example.com/smoke', fixture: true }];
 loadLocalEnv();
@@ -56,12 +56,10 @@ export function createApp({ telemetry = createTelemetry() } = {}) {
         return;
       }
       if (request.method === 'GET' && url.pathname === '/mend') {
-        if (!latestMendRun) {
-          sendJson(response, 404, { error: 'POST /mend/runs before opening the target view' });
-          return;
-        }
-        response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        response.end(renderTargetView(latestMendRun));
+        // The empty state is still the page, not an error body: an operator who opens the
+        // view before starting a run should be told how to start one, in the same shell.
+        response.writeHead(latestMendRun ? 200 : 404, { 'content-type': 'text/html; charset=utf-8' });
+        response.end(latestMendRun ? renderTargetView(latestMendRun) : renderEmptyView());
         return;
       }
       if (request.method === 'POST' && url.pathname === '/mend/runs') {
