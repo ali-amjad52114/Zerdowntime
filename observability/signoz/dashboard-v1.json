@@ -1,14 +1,17 @@
 {
-  "description": "Run-correlated latency, execution rate, and controlled failures for the product-neutral Zero Downtime fixture.",
+  "description": "Mend run health, axis validation, repair activity, and legacy smoke signals. Pivot to logs and traces with the canonical run correlation attributes.",
   "image": "/assets/Icons/eight-ball",
   "layout": [
     { "h": 6, "i": "38beb501-3789-40ae-a65b-29064883e254", "moved": false, "static": false, "w": 6, "x": 0, "y": 0 },
     { "h": 6, "i": "a9eeb9ad-e2d2-4857-a565-e0076816baba", "moved": false, "static": false, "w": 6, "x": 6, "y": 0 },
-    { "h": 6, "i": "e3641bd3-aee2-4428-990a-eab87c800de6", "moved": false, "static": false, "w": 12, "x": 0, "y": 6 }
+    { "h": 6, "i": "e3641bd3-aee2-4428-990a-eab87c800de6", "moved": false, "static": false, "w": 6, "x": 0, "y": 6 },
+    { "h": 6, "i": "5b6a270e-758d-44de-9af9-60686d0f411d", "moved": false, "static": false, "w": 6, "x": 6, "y": 6 },
+    { "h": 6, "i": "ddad1326-9527-46d7-8db4-dfe048c2fd96", "moved": false, "static": false, "w": 6, "x": 0, "y": 12 },
+    { "h": 6, "i": "b04dbd0d-d812-47db-bbee-876d39823b9b", "moved": false, "static": false, "w": 6, "x": 6, "y": 12 }
   ],
   "panelMap": {},
-  "tags": ["zero-downtime", "opentelemetry"],
-  "title": "Zero Downtime Sponsor Smoke",
+  "tags": ["mend", "zero-downtime", "opentelemetry", "gate-g3"],
+  "title": "Mend Operations and Sponsor Proof",
   "uploadedGrafana": false,
   "uuid": "5c4d8678-218b-41f5-b3da-71733b7613cb",
   "variables": {},
@@ -54,6 +57,51 @@
       },
       "timePreferance": "GLOBAL_TIME",
       "title": "Stage failures",
+      "yAxisUnit": "none"
+    },
+    {
+      "description": "Completed Mend X/Y/Z factory runs grouped by outcome.",
+      "id": "5b6a270e-758d-44de-9af9-60686d0f411d",
+      "panelTypes": "graph",
+      "query": {
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [{ "disabled": true, "legend": "", "name": "A", "query": "" }],
+        "promql": [{ "disabled": false, "legend": "{{outcome}}", "name": "A", "query": "sum by (outcome) (increase({\"mend_factory_runs_total\"}[5m]))" }],
+        "queryType": "promql"
+      },
+      "timePreferance": "GLOBAL_TIME",
+      "title": "Mend factory outcomes",
+      "yAxisUnit": "none"
+    },
+    {
+      "description": "Axis validation failures. Use axis and run correlation attributes to pivot to logs and traces.",
+      "id": "ddad1326-9527-46d7-8db4-dfe048c2fd96",
+      "panelTypes": "graph",
+      "query": {
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [{ "disabled": true, "legend": "", "name": "A", "query": "" }],
+        "promql": [{ "disabled": false, "legend": "{{axis}}", "name": "A", "query": "sum by (axis) (increase({\"mend_validation_failures_total\"}[5m]))" }],
+        "queryType": "promql"
+      },
+      "timePreferance": "GLOBAL_TIME",
+      "title": "Mend validation failures",
+      "yAxisUnit": "none"
+    },
+    {
+      "description": "Repair attempts and successful repairs; approval and source details remain in correlated traces/logs.",
+      "id": "b04dbd0d-d812-47db-bbee-876d39823b9b",
+      "panelTypes": "graph",
+      "query": {
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [{ "disabled": true, "legend": "", "name": "A", "query": "" }],
+        "promql": [
+          { "disabled": false, "legend": "attempts", "name": "A", "query": "sum(increase({\"mend_repair_attempts_total\"}[5m]))" },
+          { "disabled": false, "legend": "success", "name": "B", "query": "sum(increase({\"mend_repair_success_total\"}[5m]))" }
+        ],
+        "queryType": "promql"
+      },
+      "timePreferance": "GLOBAL_TIME",
+      "title": "Mend repair activity",
       "yAxisUnit": "none"
     }
   ]

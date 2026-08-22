@@ -1,4 +1,13 @@
 import { loadLocalEnv } from './env.mjs';
+import {
+  createProofReport,
+  decodeMcpResponse,
+  escapeFilterLiteral,
+  readAggregateCount,
+  readMetricRowsScanned,
+  redactValue,
+  toolError,
+} from './signoz-verification-lib.mjs';
 
 loadLocalEnv('.env.local', { override: true });
 
@@ -10,13 +19,7 @@ if (!apiKey || !signozUrl) {
   throw new Error('SIGNOZ_API_KEY and SIGNOZ_URL must be available in this process environment');
 }
 
-function decodeResponse(text) {
-  const dataLines = text.split(/\r?\n/)
-    .filter((line) => line.startsWith('data:'))
-    .map((line) => line.slice(5).trim());
-  const value = dataLines.at(-1) ?? text;
-  try { return JSON.parse(value); } catch { return { message: value.trim() }; }
-}
+const proof = createProofReport({ endpoint, signozUrl });
 
 async function request(payload, sessionId) {
   const response = await fetch(endpoint, {
@@ -31,10 +34,10 @@ async function request(payload, sessionId) {
     body: JSON.stringify(payload),
   });
   const text = await response.text();
-  const decoded = text ? decodeResponse(text) : undefined;
+  const decoded = text ? decodeMcpResponse(text) : undefined;
   if (!response.ok) {
     const detail = decoded?.error?.message ?? decoded?.message ?? 'no error detail';
-    throw new Error(`SigNoz MCP returned HTTP ${response.status}: ${detail}`);
+    throw new Error(redactValue(`SigNoz MCP returned HTTP ${response.status}: ${detail}`, [apiKey]));
   }
   return {
     body: decoded,
@@ -43,6 +46,7 @@ async function request(payload, sessionId) {
   };
 }
 
+try {
 const initialized = await request({
   jsonrpc: '2.0',
   id: 1,
@@ -55,6 +59,12 @@ const initialized = await request({
 });
 
 if (initialized.body?.error) throw new Error(`initialize failed: ${initialized.body.error.message}`);
+proof.proof.mcpConnectivity = {
+  status: 'PASS',
+  initializeStatus: initialized.status,
+  protocolVersion: initialized.body?.result?.protocolVersion,
+  server: initialized.body?.result?.serverInfo,
+};
 await request({ jsonrpc: '2.0', method: 'notifications/initialized' }, initialized.sessionId);
 const listed = await request({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }, initialized.sessionId);
 if (listed.body?.error) throw new Error(`tools/list failed: ${listed.body.error.message}`);
@@ -74,16 +84,13 @@ if (probed.body?.result?.isError) {
   const detail = probed.body.result.content?.map((item) => item.text).filter(Boolean).join(' ') ?? 'unknown error';
   throw new Error(`workspace read probe failed: ${detail}`);
 }
-
-function parseToolJson(text) {
-  const json = text.split(/\s+(?:note:|\[Decisions applied\])/)[0];
-  return JSON.parse(json);
-}
+proof.proof.workspaceRead = { status: 'PASS', probe: readProbeTool.name };
 
 const telemetryProbes = [];
 const verifyRunId = process.env.SIGNOZ_VERIFY_RUN_ID;
 const verifyMetricName = process.env.SIGNOZ_VERIFY_METRIC_NAME ?? 'zero_downtime_runs_total';
 if (verifyRunId) {
+  const safeRunId = escapeFilterLiteral(verifyRunId);
   for (const name of ['signoz_aggregate_logs', 'signoz_aggregate_traces']) {
     const response = await request({
       jsonrpc: '2.0',
@@ -93,21 +100,19 @@ if (verifyRunId) {
         name,
         arguments: {
           aggregation: 'count',
-          filter: `run.id = '${verifyRunId}'`,
+          filter: `run.id = '${safeRunId}'`,
           timeRange: '1h',
           searchContext: `Verify telemetry ingestion for run ${verifyRunId}`,
         },
       },
     }, initialized.sessionId);
-    if (response.body?.error || response.body?.result?.isError) {
-      const detail = response.body?.error?.message ?? response.body?.result?.content
-        ?.map((item) => item.text).filter(Boolean).join(' ') ?? 'unknown error';
+    if (toolError(response.body)) {
+      const detail = toolError(response.body);
       throw new Error(`${name} failed: ${detail}`);
     }
-    const resultText = response.body?.result?.content?.map((item) => item.text).filter(Boolean).join(' ') ?? '';
-    const count = parseToolJson(resultText)?.data?.data?.results?.[0]?.data?.[0]?.[0];
+    const count = readAggregateCount(response.body);
     if (!(Number(count) > 0)) throw new Error(`${name} returned no matching telemetry for ${verifyRunId}`);
-    telemetryProbes.push({ tool: name, count: Number(count) });
+    telemetryProbes.push({ signal: name.endsWith('logs') ? 'logs' : 'traces', tool: name, count: Number(count), status: 'PASS' });
   }
 
   const metricResponse = await request({
@@ -123,30 +128,42 @@ if (verifyRunId) {
       },
     },
   }, initialized.sessionId);
-  if (metricResponse.body?.error || metricResponse.body?.result?.isError) {
-    const detail = metricResponse.body?.error?.message ?? metricResponse.body?.result?.content
-      ?.map((item) => item.text).filter(Boolean).join(' ') ?? 'unknown error';
+  if (toolError(metricResponse.body)) {
+    const detail = toolError(metricResponse.body);
     throw new Error(`signoz_query_metrics failed: ${detail}`);
   }
-  const metricText = metricResponse.body?.result?.content?.map((item) => item.text).filter(Boolean).join(' ') ?? '';
-  const metricRowsScanned = parseToolJson(metricText)?.data?.meta?.rowsScanned;
+  const metricRowsScanned = readMetricRowsScanned(metricResponse.body);
   if (!(Number(metricRowsScanned) > 0)) throw new Error('signoz_query_metrics found no ingested metric rows');
   telemetryProbes.push({
+    signal: 'metrics',
     tool: 'signoz_query_metrics',
     metric: verifyMetricName,
     rowsScanned: Number(metricRowsScanned),
+    status: 'PASS',
+    correlation: 'Metric-name readback; the run.id correlation is proven by the log and trace probes.',
   });
+  proof.proof.telemetryReadback = {
+    status: 'PASS',
+    runId: verifyRunId,
+    timeRange: '1h',
+    signals: telemetryProbes,
+  };
 }
 
-console.log(JSON.stringify({
-  ok: true,
-  endpoint,
-  initializeStatus: initialized.status,
+console.log(JSON.stringify(redactValue({
+  ok: proof.proof.mcpConnectivity.status === 'PASS'
+    && proof.proof.workspaceRead.status === 'PASS'
+    && (!verifyRunId || proof.proof.telemetryReadback.status === 'PASS'),
+  ...proof,
   toolsListStatus: listed.status,
-  server: initialized.body?.result?.serverInfo,
-  protocolVersion: initialized.body?.result?.protocolVersion,
   toolCount: tools.length,
-  workspaceReadProbe: readProbeTool.name,
-  telemetryProbes,
   sampleTools: tools.slice(0, 8).map((tool) => tool.name),
-}, null, 2));
+}, [apiKey]), null, 2));
+} catch (error) {
+  process.exitCode = 1;
+  console.error(JSON.stringify(redactValue({
+    ok: false,
+    ...proof,
+    failure: { message: error?.message ?? String(error) },
+  }, [apiKey]), null, 2));
+}
