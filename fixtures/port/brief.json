@@ -1,0 +1,7 @@
+{
+  "title": "Neutral structured-record change",
+  "summary": "Consume a fresh normalized record without coupling the application to the current fixture source.",
+  "goals": ["Preserve the normalized-record boundary", "Produce auditable automated evidence"],
+  "constraints": ["Do not commit credentials", "Keep the data provider replaceable"],
+  "acceptance_criteria": ["A validated record reaches the consumer", "The run stops before release until a human approves"]
+}

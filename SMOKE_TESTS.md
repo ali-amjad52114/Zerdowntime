@@ -17,6 +17,8 @@ This specification proves sponsor-tool integration independently of the final pr
 
 ## Port smoke tests
 
+Repository implementation and credential-free commands are documented in `port/README.md`. Items that require an authenticated Port organization remain unchecked until the connected smoke test is performed; local validation must not be presented as Port UI/API evidence.
+
 - [ ] Catalog project goals, constraints, technical choices, risks, and services.
 - [ ] Accept a product brief or change request as workflow input.
 - [ ] Assemble context and pass it to the correct agent/tool.

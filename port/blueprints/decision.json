@@ -1,0 +1,21 @@
+{
+  "identifier": "zdDecision",
+  "title": "Workflow Decision",
+  "icon": "Checklist",
+  "description": "An immutable approval, rejection, retry, or escalation decision for a workflow run.",
+  "schema": {
+    "properties": {
+      "kind": { "title": "Kind", "type": "string", "enum": ["approve", "reject", "retry", "escalate"] },
+      "actor": { "title": "Actor", "type": "string" },
+      "reason": { "title": "Reason", "type": "string" },
+      "recorded_at": { "title": "Recorded at", "type": "string", "format": "date-time" }
+    },
+    "required": ["kind", "actor", "recorded_at"]
+  },
+  "mirrorProperties": {},
+  "calculationProperties": {},
+  "aggregationProperties": {},
+  "relations": {
+    "run": { "title": "Workflow run", "target": "zdWorkflowRun", "required": true, "many": false }
+  }
+}
