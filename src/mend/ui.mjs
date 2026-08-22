@@ -522,16 +522,136 @@ ul.evidence p{margin:3px 0;font-size:12px;color:var(--ink-2)}
 a{color:var(--struct)}
 .mono{font-family:var(--mono)}
 footer{margin-top:34px;border-top:1px solid var(--rule);padding-top:16px;font-size:12px;color:var(--ink-3)}
-@media(max-width:860px){.panels{grid-template-columns:1fr}header.top{flex-direction:column;align-items:flex-start}h1{font-size:32px}}
+.s-pending{background:var(--struct-bg);color:var(--struct)}
+.p-pending{border-color:var(--rule-2)}
+.whygrid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:14px}
+.whygrid ul{margin:6px 0 0;padding-left:18px}
+.whygrid li{margin:6px 0;font-size:13px;color:var(--ink-2)}
+.panels-diligence{margin-top:18px}
+.taskform{display:grid;gap:9px;margin-top:12px}
+.taskform input,.taskform textarea,.taskform select{width:100%;font:inherit;font-size:13px;border:1px solid var(--rule-2);border-radius:8px;padding:9px 10px;background:var(--paper);color:var(--ink)}
+.taskform textarea{min-height:74px;resize:vertical}
+button{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--struct);border-radius:8px;padding:9px 14px;background:var(--struct);color:#fff;cursor:pointer}
+button:hover{filter:brightness(1.08)}
+.taskform button{justify-self:start}
+.diligence-empty button{margin-top:14px}
+.task .finding{border-top:1px solid var(--rule);margin-top:12px;padding-top:12px}
+.decision{border:1px solid var(--rule-2);border-radius:12px;padding:18px;background:var(--panel)}
+.decision h3{margin:6px 0 8px}
+.decision.d-final{border-color:var(--ok)}
+.decision.d-ready{border-color:var(--struct)}
+.decision.d-pending{border-style:dashed;color:var(--ink-2)}
+@media(max-width:860px){.panels{grid-template-columns:1fr}header.top{flex-direction:column;align-items:flex-start}h1{font-size:32px}.whygrid{grid-template-columns:1fr}}
 `;
 
-function page({ title, content }) {
+function page({ title, content, script = '' }) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <style>${STYLES}</style>
-</head><body><main class="shell">${content}</main></body></html>`;
+</head><body><main class="shell">${content}</main>${script}</body></html>`;
 }
+
+function humanize(value) {
+  return String(value ?? '').toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+/**
+ * One reviewable unit of diligence work, linked to the axis records that prompted it.
+ *
+ * A task is either open — and then it carries the form that records its finding — or complete,
+ * and then it shows the finding and who signed it. There is no third state: a task without a
+ * recorded finding does not count toward the decision gate.
+ */
+function taskCard(task) {
+  const complete = task.status === 'COMPLETE';
+  const body = task.completion
+    ? `<div class="finding"><div class="statlab">Finding</div><p>${escapeHtml(task.completion.finding)}</p><p class="vcap">${escapeHtml(task.completion.actor)} · ${escapeHtml(task.completion.completedAt)}</p></div>`
+    : `<div class="taskform">
+<input data-actor-for="${escapeHtml(task.id)}" placeholder="Reviewer name">
+<textarea data-finding-for="${escapeHtml(task.id)}" placeholder="Record the reviewed finding and material gaps"></textarea>
+<button data-complete-task="${escapeHtml(task.id)}">Complete review</button>
+</div>`;
+  return `<article class="panel task p-${complete ? 'released' : 'pending'}">
+<div class="panelhead">
+<div><span class="pnum">${escapeHtml(task.axis)}</span><h3>${escapeHtml(task.title)}</h3></div>
+<div class="panelmeta"><span class="pstatus s-${complete ? 'released' : 'pending'}">${escapeHtml(task.status)}</span></div>
+</div>
+<p class="psource">${escapeHtml(task.objective)}</p>
+<div class="statlab">Deliverable</div><p>${escapeHtml(task.deliverable)}</p>
+<p class="vcap">${escapeHtml(task.evidence.length)} linked evidence ${task.evidence.length === 1 ? 'record' : 'records'}</p>
+${body}
+</article>`;
+}
+
+/**
+ * The evidence-to-action gate.
+ *
+ * The decision stays locked until every task carries a recorded finding, because the whole
+ * point of the gate is that a human read the evidence — not that a human clicked through it.
+ */
+function diligenceSection(workflow) {
+  if (!workflow) {
+    return `<section class="trace diligence-empty">
+<div class="eyebrow">Evidence → Action</div>
+<div class="tracehead"><h2>Turn this evidence into focused diligence</h2></div>
+<p class="sub">Create competitive, structural and IP review work linked directly to the records above. The final decision stays gated until every review has a recorded finding.</p>
+<button id="create-diligence">Create diligence workflow</button>
+</section>`;
+  }
+  const { recommendation, tasks, decision, status } = workflow;
+  const decisionBlock = decision
+    ? `<div class="decision d-final"><div class="eyebrow">Human decision</div><h3>${escapeHtml(humanize(decision.decision))}</h3><p>${escapeHtml(decision.rationale)}</p><p class="vcap">${escapeHtml(decision.actor)} · ${escapeHtml(decision.decidedAt)}</p></div>`
+    : status === 'READY_FOR_DECISION'
+      ? `<div class="decision d-ready"><div class="eyebrow">Ready for decision</div><h3>Record the reviewed outcome</h3>
+<div class="taskform">
+<select id="decision-value"><option value="PROCEED_TO_FOCUSED_DILIGENCE">Proceed to focused diligence</option><option value="HOLD">Hold</option><option value="ESCALATE">Escalate</option></select>
+<input id="decision-actor" placeholder="Decision maker">
+<textarea id="decision-rationale" placeholder="Decision rationale"></textarea>
+<button id="record-decision">Record decision</button>
+</div></div>`
+      : `<div class="decision d-pending"><div class="eyebrow">Decision gate</div><h3>Complete all three reviews</h3><p>The final decision remains locked until competitive, structural and IP findings are recorded.</p></div>`;
+  return `<section class="trace">
+<div class="eyebrow">Evidence → Action</div>
+<div class="tracehead"><h2>${escapeHtml(humanize(recommendation.code))}</h2><span class="mono">${escapeHtml(status)}</span></div>
+<p class="sub">${escapeHtml(recommendation.summary)}</p>
+<div class="whygrid">
+<div><div class="statlab">Why</div><ul>${recommendation.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('')}</ul></div>
+<div><div class="statlab">Evidence gaps</div><ul>${recommendation.gaps.map((gap) => `<li>${escapeHtml(gap)}</li>`).join('')}</ul></div>
+</div>
+</section>
+<section class="panels panels-diligence">${tasks.map(taskCard).join('')}</section>
+<section class="trace">${decisionBlock}</section>`;
+}
+
+/**
+ * The only client-side script on the page, and only when there is something to submit.
+ *
+ * The read-only view stays a plain document; interactivity arrives with the diligence forms
+ * because those genuinely post back. Vanilla listeners, no framework, no hydration.
+ */
+const DILIGENCE_SCRIPT = `<script>
+async function mendPost(path, body = {}) {
+  const response = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'Request failed');
+  location.reload();
+}
+document.querySelector('#create-diligence')?.addEventListener('click', async () => {
+  try { await mendPost('/mend/diligence'); } catch (error) { alert(error.message); }
+});
+for (const button of document.querySelectorAll('[data-complete-task]')) {
+  button.addEventListener('click', async () => {
+    const id = button.dataset.completeTask;
+    const actor = document.querySelector('[data-actor-for="' + id + '"]').value;
+    const finding = document.querySelector('[data-finding-for="' + id + '"]').value;
+    try { await mendPost('/mend/diligence/tasks/' + encodeURIComponent(id) + '/complete', { actor, finding }); } catch (error) { alert(error.message); }
+  });
+}
+document.querySelector('#record-decision')?.addEventListener('click', async () => {
+  try { await mendPost('/mend/diligence/decision', { decision: document.querySelector('#decision-value').value, actor: document.querySelector('#decision-actor').value, rationale: document.querySelector('#decision-rationale').value }); } catch (error) { alert(error.message); }
+});
+</script>`;
 
 function header(trace) {
   const status = trace.status ?? 'NOT_RUN';
@@ -564,7 +684,7 @@ export function renderEmptyView() {
   });
 }
 
-export function renderTargetView(run) {
+export function renderTargetView(run, workflow = null) {
   if (!run?.axes) return renderEmptyView();
   const trace = buildRunTrace(run);
   const stageOf = (id) => trace.stages.find((stage) => stage.id === id) ?? { status: 'failed', gate: 'UNKNOWN', records: 0, issues: [] };
@@ -606,6 +726,8 @@ ${traceSection(trace)}
 <section class="panels">${panels}</section>
 ${downstreamSection(downstreamRollup)}
 <section class="panels panels-downstream">${downstreamPanels}</section>
+${diligenceSection(workflow)}
 <footer>Five panels over three axes: X — pipeline activity, Y — structural readiness, Z — IP activity and orphan exclusivity. The derived sections below read the same five panels; a computed value is a formula over this run's own data, an illustrative value is a disclosed planning assumption, and neither is a forecast of actual performance or a trained predictive model. Curated tables carry a cited basis and are not live sources. Designation is not approval, exclusivity accrues on approval, and none of this is legal, regulatory, investment or clinical advice.</footer>`,
+    script: DILIGENCE_SCRIPT,
   });
 }

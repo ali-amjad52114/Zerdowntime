@@ -140,8 +140,12 @@ test('the page is self-contained and theme-aware', async () => {
   const html = renderTargetView(healthy);
   assert.match(html, /^<!doctype html>/);
   assert.match(html, /prefers-color-scheme:dark/);
-  assert.doesNotMatch(html, /<script/);
+  // The read-only half of the page stays a plain document. The diligence forms genuinely
+  // post back, so the page carries exactly one inline vanilla script — never a framework,
+  // never a remote asset, and never a second block that could quietly become a bundle.
   assert.doesNotMatch(html, /https?:\/\/[^"']*\.(?:js|css)/);
+  assert.doesNotMatch(html, /<script[^>]+src=/);
+  assert.equal((html.match(/<script/g) ?? []).length, 1);
 });
 
 test('a degraded core stage visibly propagates into the downstream sections that depend on it, and leaves the rest released', async () => {
