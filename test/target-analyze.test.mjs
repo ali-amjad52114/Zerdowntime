@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import { rm } from 'node:fs/promises';
 import test from 'node:test';
 import { InMemoryLogRecordExporter } from '@opentelemetry/sdk-logs';
 import { AggregationTemporality, InMemoryMetricExporter } from '@opentelemetry/sdk-metrics';
 import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
 import { createApp } from '../src/server.mjs';
+import { analyzeTarget, resolveStructurePath } from '../src/axes/y/analyze.mjs';
 import { createTelemetry } from '../src/telemetry.mjs';
 
 const ANALYZE_BODY = {
@@ -155,4 +157,49 @@ test('GET /target/missing/analysis and /target/missing/structure are 404', async
   const structure = await fetch(`${base}/target/missing/structure`);
   assert.equal(structure.status, 404);
   assert.equal(mock.analyzeCalls.length, 0);
+});
+
+test('exact-accession analysis falls back only to AlphaFold and records P2Rank provenance', async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url: String(url), method: options.method ?? 'GET', body: options.body });
+    if (String(url).includes('search.rcsb.org')) {
+      const query = JSON.parse(options.body).query;
+      assert.equal(query.parameters.attribute, 'rcsb_polymer_entity_container_identifiers.reference_sequence_identifiers.database_accession');
+      assert.equal(query.parameters.operator, 'exact_match');
+      assert.equal(query.parameters.value, 'P00533');
+      return { ok: true, status: 200, json: async () => ({ result_set: [] }) };
+    }
+    if (String(url).includes('alphafold.ebi.ac.uk') && options.method === 'HEAD') {
+      return { ok: true, status: 200 };
+    }
+    if (String(url).includes('alphafold.ebi.ac.uk')) {
+      return { ok: true, status: 200, text: async () => 'HEADER ALPHAFOLD TEST' };
+    }
+    throw new Error(`unexpected URL ${url}`);
+  };
+  const pdbId = 'AF-P00533-F1';
+  try {
+    const result = await analyzeTarget({
+      target: 'EGFR',
+      uniprot_id: 'P00533',
+      disease: 'Glioblastoma',
+      fetchImpl,
+      prankImpl: async () => [{ rank: 1, score: 5, probability: 0.8, residues: ['A:10'] }],
+    });
+    assert.equal(result.structure.source, 'alphafold');
+    assert.equal(result.pockets_source, 'p2rank');
+    assert.deepEqual(result.pockets_provenance, {
+      engine: 'P2Rank',
+      version: process.env.MEND_P2RANK_VERSION ?? 'unreported',
+      mode: 'predict',
+      command: 'prank predict',
+      structure_id: pdbId,
+      generated_at: result.pockets_provenance.generated_at,
+    });
+    assert.equal(calls.filter((call) => call.url.includes('search.rcsb.org')).length, 1);
+    assert.ok(calls.every((call) => !String(call.body ?? '').includes('full_text')));
+  } finally {
+    await rm(resolveStructurePath(pdbId), { force: true });
+  }
 });

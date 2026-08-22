@@ -170,17 +170,30 @@ async function walkForPredictionsCsv(dir, depth) {
 
 async function tryPrankPredict(structurePath) {
   await mkdir(P2RANK_CACHE_DIR, { recursive: true });
+  let execution;
   try {
-    await execFileAsync('prank', ['predict', '-f', structurePath, '-o', P2RANK_CACHE_DIR], {
+    execution = await execFileAsync('prank', ['predict', '-f', structurePath, '-o', P2RANK_CACHE_DIR], {
       timeout: 20_000,
       windowsHide: true,
     });
   } catch (error) {
-    return { pockets: [], error: `P2Rank unavailable: ${error.message}` };
+    return {
+      pockets: [],
+      error: `P2Rank unavailable: ${error.message}`,
+      version: process.env.MEND_P2RANK_VERSION ?? 'unreported',
+      mode: 'predict',
+    };
   }
   const csvPath = await findPredictionsCsv([P2RANK_CACHE_DIR, `${structurePath}_out`]);
   if (!csvPath) return { pockets: [], error: 'P2Rank completed without a predictions CSV' };
-  return { pockets: parseP2RankPredictionsCsv(await readFile(csvPath, 'utf8')), error: null };
+  const banner = `${execution?.stdout ?? ''}\n${execution?.stderr ?? ''}`;
+  const detectedVersion = banner.match(/P2Rank[^0-9]*([0-9]+(?:\.[0-9]+)+)/i)?.[1] ?? null;
+  return {
+    pockets: parseP2RankPredictionsCsv(await readFile(csvPath, 'utf8')),
+    error: null,
+    version: process.env.MEND_P2RANK_VERSION ?? detectedVersion ?? 'unreported',
+    mode: 'predict',
+  };
 }
 
 async function runPockets({ dest, prankImpl }) {
@@ -189,21 +202,41 @@ async function runPockets({ dest, prankImpl }) {
     try {
       output = await prankImpl({ dest, structurePath: dest });
     } catch (error) {
-      return { pockets: [], pockets_source: 'unavailable', pockets_error: `P2Rank unavailable: ${error.message}` };
+      return {
+        pockets: [],
+        pockets_source: 'unavailable',
+        pockets_error: `P2Rank unavailable: ${error.message}`,
+        pockets_engine: 'P2Rank',
+        pockets_version: process.env.MEND_P2RANK_VERSION ?? 'unreported',
+        pockets_mode: 'predict',
+      };
     }
     if (typeof output === 'string') {
-      return { pockets: parseP2RankPredictionsCsv(output), pockets_source: 'p2rank' };
+      return { pockets: parseP2RankPredictionsCsv(output), pockets_source: 'p2rank', pockets_version: process.env.MEND_P2RANK_VERSION ?? 'unreported', pockets_mode: 'predict' };
     }
     if (output?.pockets_source === 'fixture') {
       return { pockets: takeTopPockets(output.pockets), pockets_source: 'fixture', pockets_error: null };
     }
-    if (Array.isArray(output)) return { pockets: takeTopPockets(output), pockets_source: 'p2rank' };
-    if (Array.isArray(output?.pockets)) return { pockets: takeTopPockets(output.pockets), pockets_source: 'p2rank' };
-    if (output?.csv) return { pockets: parseP2RankPredictionsCsv(output.csv), pockets_source: 'p2rank' };
+    if (Array.isArray(output)) return { pockets: takeTopPockets(output), pockets_source: 'p2rank', pockets_version: process.env.MEND_P2RANK_VERSION ?? 'unreported', pockets_mode: 'predict' };
+    if (Array.isArray(output?.pockets)) return { pockets: takeTopPockets(output.pockets), pockets_source: 'p2rank', pockets_version: output.version ?? process.env.MEND_P2RANK_VERSION ?? 'unreported', pockets_mode: output.mode ?? 'predict' };
+    if (output?.csv) return { pockets: parseP2RankPredictionsCsv(output.csv), pockets_source: 'p2rank', pockets_version: output.version ?? process.env.MEND_P2RANK_VERSION ?? 'unreported', pockets_mode: output.mode ?? 'predict' };
   }
   const predicted = await tryPrankPredict(dest);
-  if (predicted.pockets.length) return { pockets: predicted.pockets, pockets_source: 'p2rank', pockets_error: null };
-  return { pockets: [], pockets_source: 'unavailable', pockets_error: predicted.error };
+  if (predicted.pockets.length) return {
+    pockets: predicted.pockets,
+    pockets_source: 'p2rank',
+    pockets_error: null,
+    pockets_version: predicted.version,
+    pockets_mode: predicted.mode,
+  };
+  return {
+    pockets: [],
+    pockets_source: 'unavailable',
+    pockets_error: predicted.error,
+    pockets_engine: 'P2Rank',
+    pockets_version: predicted.version ?? process.env.MEND_P2RANK_VERSION ?? 'unreported',
+    pockets_mode: predicted.mode ?? 'predict',
+  };
 }
 
 /**
@@ -264,7 +297,14 @@ export async function analyzeTarget({
     await downloadStructure({ pdbId: structure.pdb_id, dest, fetchImpl });
   }
 
-  const { pockets, pockets_source, pockets_error = null } = await runPockets({ dest, prankImpl });
+  const {
+    pockets,
+    pockets_source,
+    pockets_error = null,
+    pockets_engine = null,
+    pockets_version = null,
+    pockets_mode = null,
+  } = await runPockets({ dest, prankImpl });
   const result = {
     target,
     uniprot_id: resolvedUniProt,
@@ -274,8 +314,12 @@ export async function analyzeTarget({
     pockets,
     pockets_source,
     pockets_provenance: {
-      engine: pockets_source === 'p2rank' ? 'P2Rank' : pockets_source,
-      version: process.env.MEND_P2RANK_VERSION ?? null,
+      engine: pockets_engine ?? (pockets_source === 'p2rank' ? 'P2Rank' : pockets_source),
+      version: pockets_engine === 'P2Rank' || pockets_source === 'p2rank'
+        ? (pockets_version ?? process.env.MEND_P2RANK_VERSION ?? 'unreported')
+        : null,
+      mode: pockets_mode ?? (pockets_source === 'fixture' ? 'fixture' : 'not_run'),
+      command: pockets_engine === 'P2Rank' || pockets_source === 'p2rank' ? 'prank predict' : null,
       structure_id: structure.pdb_id,
       generated_at: new Date().toISOString(),
     },

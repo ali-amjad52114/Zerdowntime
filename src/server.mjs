@@ -21,7 +21,80 @@ import { executePortAction, portEntity } from './mend/port-control.mjs';
 import { configuredBrightDataAcquirer } from './acquisition/brightdata-cli.mjs';
 
 const fallbackFixture = [{ title: 'Product-neutral smoke record', url: 'https://example.com/smoke', fixture: true }];
+const REQUIRED_HANDOFF_AXES = Object.freeze(['X', 'Y', 'Z']);
 loadLocalEnv();
+
+function requestedHandoffAxes(value) {
+  if (value == null) return [...REQUIRED_HANDOFF_AXES];
+  if (!Array.isArray(value)) throw new Error('handoff axes must be the complete X/Y/Z set');
+  const axes = value.map((axis) => String(axis).trim().toUpperCase());
+  const unique = new Set(axes);
+  if (axes.length !== REQUIRED_HANDOFF_AXES.length
+    || unique.size !== REQUIRED_HANDOFF_AXES.length
+    || REQUIRED_HANDOFF_AXES.some((axis) => !unique.has(axis))) {
+    throw new Error('handoff axes must be the complete X/Y/Z set');
+  }
+  return [...REQUIRED_HANDOFF_AXES];
+}
+
+function canonicalUniProtId(run) {
+  const value = run?.uniprot_id ?? run?.axes?.Y?.summary?.uniprot_id;
+  return String(value ?? '').trim().toUpperCase() || null;
+}
+
+function bindTargetRun(run, { disease, diseaseRunId, candidate, runId } = {}) {
+  return {
+    ...run,
+    runId: run?.runId ?? runId,
+    disease_run_id: run?.disease_run_id ?? diseaseRunId,
+    candidate_id: run?.candidate_id ?? candidate?.candidate_id,
+    disease: run?.disease ?? disease,
+    target: candidate?.name ?? run?.target,
+    uniprot_id: canonicalUniProtId(run) ?? (String(candidate?.uniprot_id ?? '').trim().toUpperCase() || null),
+  };
+}
+
+function canonicalTargetRequest(body, boundRun) {
+  const target = String(boundRun?.target ?? '').trim();
+  const disease = String(boundRun?.disease ?? '').trim();
+  const uniprotId = canonicalUniProtId(boundRun);
+  if (!target || !disease || !uniprotId) throw new Error('target_run_id is missing canonical target, disease, or UniProt identity');
+  if (body.target != null && String(body.target).trim().toUpperCase() !== target.toUpperCase()) {
+    throw new Error('target does not match target_run_id');
+  }
+  if (body.disease != null && String(body.disease).trim().toUpperCase() !== disease.toUpperCase()) {
+    throw new Error('disease does not match target_run_id');
+  }
+  if (body.uniprot_id != null && String(body.uniprot_id).trim().toUpperCase() !== uniprotId) {
+    throw new Error('uniprot_id does not match target_run_id');
+  }
+  return { target, disease, uniprot_id: uniprotId };
+}
+
+function failedTargetRun({ runId, diseaseRunId, disease, candidate, error }) {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    runId,
+    factoryVersion: 'discovery-v1',
+    mode: 'normal',
+    status: 'FAILED',
+    publishStatus: 'BLOCKED',
+    failedAxes: [...REQUIRED_HANDOFF_AXES],
+    disease_run_id: diseaseRunId,
+    candidate_id: candidate.candidate_id,
+    disease,
+    target: candidate.name,
+    uniprot_id: String(candidate.uniprot_id ?? '').trim().toUpperCase() || null,
+    error: message,
+    axes: Object.fromEntries(REQUIRED_HANDOFF_AXES.map((axis) => [axis, {
+      axis,
+      status: 'FAILED',
+      records: [],
+      summary: {},
+      validation: { status: 'FAIL', reason: `target execution failed: ${message}` },
+    }])),
+  };
+}
 
 async function defaultRecords() {
   try {
@@ -77,8 +150,8 @@ export function createApp({
   const diligenceWorkflows = new Map(Object.entries(restored.diligenceWorkflows ?? {}));
   const analysisCache = new Map();
   for (const analysis of restored.analyses ?? []) {
-    cacheAnalysis(analysisCache, analysis);
     if (analysis?.target_run_id) analysisCache.set(analysis.target_run_id, analysis);
+    else cacheAnalysis(analysisCache, analysis);
   }
   const compoundCache = new Map(Object.entries(restored.compoundAnalyses ?? {}));
   const portExecutions = new Map(Object.entries(restored.portExecutions ?? {}));
@@ -86,10 +159,7 @@ export function createApp({
 
   function persistState() {
     if (!stateStore?.save) return;
-    const analyses = [...new Map([...analysisCache.values()].map((analysis) => [
-      analysis?.target_run_id ?? analysis?.structure?.pdb_id ?? analysis?.uniprot_id ?? analysis?.target,
-      analysis,
-    ])).values()];
+    const analyses = [...new Set(analysisCache.values())];
     stateStore.save({
       latestMendRun,
       latestDiligenceWorkflow,
@@ -155,6 +225,7 @@ export function createApp({
         const idempotencyKey = String(request.headers['idempotency-key'] ?? '');
         const actions = {
           handoff_candidate: async (action) => {
+            const requestedAxes = requestedHandoffAxes(action.input.axes);
             if (action.resource.parent_id !== discoveryState.run_id) throw new Error('Port disease run does not match active Mend discovery');
             const candidate = discoveryState.candidates.find((item) => item.candidate_id === action.resource.id);
             if (!candidate) throw new Error('Port candidate is not part of the active evidence-derived candidate set');
@@ -172,7 +243,11 @@ export function createApp({
               telemetry,
               parentSpan: requestSpan,
             });
-            const bound = { ...run, disease_run_id: discoveryState.run_id, candidate_id: candidate.candidate_id, target: candidate.name };
+            const bound = bindTargetRun(run, {
+              disease: discoveryState.disease,
+              diseaseRunId: discoveryState.run_id,
+              candidate,
+            });
             targetRuns.set(bound.runId, bound);
             latestMendRun = bound;
             const selected = [...new Set([...(discoveryState.selection.selected_candidate_ids ?? []), candidate.candidate_id])];
@@ -188,7 +263,7 @@ export function createApp({
               },
             };
             persistState();
-            return { port_entities: [portTargetEntity(bound, action.input.axes), ...action.input.axes.map((axis) => portAxisEntity(bound, axis))] };
+            return { port_entities: [portTargetEntity(bound, requestedAxes), ...requestedAxes.map((axis) => portAxisEntity(bound, axis))] };
           },
           retry_axis: async (action) => {
             const run = targetRuns.get(action.resource.parent_id);
@@ -281,29 +356,31 @@ export function createApp({
       }
       if (request.method === 'POST' && url.pathname === '/target/analyze') {
         const body = await readJson(request);
-        const target = body.target;
-        const uniprot_id = body.uniprot_id;
-        const disease = body.disease;
         const targetRunId = String(body.target_run_id ?? '');
         const boundRun = targetRunId ? targetRuns.get(targetRunId) : null;
         if (discoveryState.status !== 'NOT_STARTED' && !targetRunId) {
           throw new Error('target_run_id is required for disease-first target analysis');
         }
         if (targetRunId && !boundRun) throw new Error('unknown target_run_id');
-        if (boundRun && String(boundRun.target).toUpperCase() !== String(target).toUpperCase()) {
-          throw new Error('target does not match target_run_id');
-        }
+        const canonical = boundRun
+          ? canonicalTargetRequest(body, boundRun)
+          : { target: body.target, uniprot_id: body.uniprot_id, disease: body.disease };
+        const { target, uniprot_id, disease } = canonical;
         const analyzeSpan = telemetry.startSpan('target.structure.analyze', {
           'target.name': target ?? '',
           'uniprot.id': uniprot_id ?? '',
         }, requestSpan);
         try {
-          const analyzed = await targetAnalyze({ target, uniprot_id, disease, fetchImpl, prankImpl, cache: analysisCache });
+          const cachedForRun = targetRunId ? analysisCache.get(targetRunId) : null;
+          const analyzed = cachedForRun ?? await targetAnalyze({
+            target, uniprot_id, disease, fetchImpl, prankImpl,
+            cache: targetRunId ? undefined : analysisCache,
+          });
           const result = { ...analyzed, target_run_id: targetRunId || null };
           analyzeSpan.setAttribute('structure.pdb_id', result.structure?.pdb_id ?? '');
           analyzeSpan.setAttribute('structure.source', result.structure?.source ?? '');
-          cacheAnalysis(analysisCache, result);
           if (targetRunId) analysisCache.set(targetRunId, result);
+          else cacheAnalysis(analysisCache, result);
           persistState();
           sendJson(response, 200, result);
         } catch (error) {
@@ -355,17 +432,19 @@ export function createApp({
         const boundRun = targetRunId ? targetRuns.get(targetRunId) : null;
         if (discoveryState.status !== 'NOT_STARTED' && !targetRunId) throw new Error('target_run_id is required for disease-first compound investigation');
         if (targetRunId && !boundRun) throw new Error('unknown target_run_id');
-        if (boundRun && String(boundRun.target).toUpperCase() !== String(body.target).toUpperCase()) throw new Error('target does not match target_run_id');
+        const canonical = boundRun
+          ? canonicalTargetRequest(body, boundRun)
+          : { target: body.target, uniprot_id: body.uniprot_id, disease: body.disease };
         const compoundSpan = telemetry.startSpan('target.compounds.investigate', {
-          'target.name': String(body.target ?? ''),
-          'uniprot.id': String(body.uniprot_id ?? ''),
+          'target.name': String(canonical.target ?? ''),
+          'uniprot.id': String(canonical.uniprot_id ?? ''),
           'source.provider': 'ChEMBL',
         }, requestSpan);
         try {
           const discovered = await compoundDiscovery({
-            target: body.target,
-            uniprot_id: body.uniprot_id,
-            disease: body.disease,
+            target: canonical.target,
+            uniprot_id: canonical.uniprot_id,
+            disease: canonical.disease,
             maxActivities: body.maxActivities,
             fetchImpl,
           });
@@ -458,8 +537,6 @@ export function createApp({
         };
         latestMendRun = null;
         latestDiligenceWorkflow = null;
-        targetRuns.clear();
-        diligenceWorkflows.clear();
         requestSpan.setAttribute('discovery.disease', disease);
         requestSpan.setAttribute('discovery.papers', papers.length);
         requestSpan.setAttribute('discovery.candidates', candidates.length);
@@ -492,6 +569,7 @@ export function createApp({
       }
       if (request.method === 'POST' && url.pathname === '/mend/discovery/handoff') {
         const body = await readJson(request);
+        const requestedAxes = requestedHandoffAxes(body.axes);
         const savedSelection = new Set(discoveryState.selection.selected_candidate_ids ?? []);
         if (!savedSelection.size || discoveryState.status !== 'CANDIDATES_SELECTED') {
           throw new Error('save a human candidate selection before X/Y/Z handoff');
@@ -502,11 +580,14 @@ export function createApp({
         if (unapproved.length) throw new Error(`handoff candidate was not human-selected: ${unapproved.join(', ')}`);
         const candidates = candidateIds.map((id) => discoveryState.candidates.find((candidate) => candidate.candidate_id === id));
         if (candidates.some((candidate) => !candidate)) throw new Error('handoff contains an unknown candidate');
-        const results = await Promise.all(candidates.map(async (candidate) => {
-          const run = await targetDiligence({
+        const executions = candidates.map((candidate) => ({
+          candidate,
+          runId: `discovery-${candidate.candidate_id}-${randomUUID().slice(0, 8)}`,
+        }));
+        const settlements = await Promise.allSettled(executions.map(({ candidate, runId }) => targetDiligence({
             disease: discoveryState.disease,
             target: candidate.name,
-            runId: `discovery-${candidate.candidate_id}-${randomUUID().slice(0, 8)}`,
+            runId,
             diseaseRunId: discoveryState.run_id,
             candidateId: candidate.candidate_id,
             targetAliases: candidate.aliases ?? [],
@@ -514,23 +595,48 @@ export function createApp({
             pipelineAcquire: brightDataAcquire,
             telemetry,
             parentSpan: requestSpan,
+          })));
+        const results = settlements.map((settlement, index) => {
+          const { candidate, runId } = executions[index];
+          if (settlement.status === 'rejected') {
+            return failedTargetRun({
+              runId,
+              diseaseRunId: discoveryState.run_id,
+              disease: discoveryState.disease,
+              candidate,
+              error: settlement.reason,
+            });
+          }
+          return bindTargetRun(settlement.value, {
+            disease: discoveryState.disease,
+            diseaseRunId: discoveryState.run_id,
+            candidate,
+            runId,
           });
-          return { ...run, disease_run_id: discoveryState.run_id, candidate_id: candidate.candidate_id, target: candidate.name };
-        }));
+        });
         for (const run of results) targetRuns.set(run.runId, run);
-        latestMendRun = results[0] ?? null;
+        latestMendRun = results.find((run) => run.status !== 'FAILED') ?? results[0] ?? null;
         latestDiligenceWorkflow = null;
-        const axes = Object.fromEntries(['X', 'Y', 'Z'].map((axis) => [axis, {
+        const axes = Object.fromEntries(requestedAxes.map((axis) => [axis, {
           status: results.every((result) => result.axes?.[axis]?.status === 'HEALTHY') ? 'COMPLETE' : 'NEEDS_REVIEW',
         }]));
+        const successfulResults = results.filter((result) => result.status !== 'FAILED');
         discoveryState = {
           ...discoveryState,
           status: 'DILIGENCE_COMPLETE',
           selection: { selected_candidate_ids: candidateIds, selected_at: discoveryState.selection.selected_at ?? new Date().toISOString() },
           handoff: {
-            status: results.every((result) => result.status === 'HEALTHY') ? 'COMPLETE' : 'DEGRADED',
+            status: successfulResults.length === 0
+              ? 'FAILED'
+              : results.every((result) => result.status === 'HEALTHY') ? 'COMPLETE' : 'DEGRADED',
             axes,
-            results: candidates.map((candidate, index) => ({ candidate_id: candidate.candidate_id, target: candidate.name, run: results[index] })),
+            requested_axes: requestedAxes,
+            results: candidates.map((candidate, index) => ({
+              candidate_id: candidate.candidate_id,
+              target: candidate.name,
+              error: results[index].error ?? null,
+              run: results[index],
+            })),
           },
         };
         telemetry.log('INFO', 'Selected targets handed to X/Y/Z diligence', {
@@ -659,7 +765,7 @@ export function createApp({
     } catch (error) {
       telemetry.failSpan(requestSpan, error);
       const clientError = error instanceof SyntaxError
-        || /required|unknown diligence task|already complete|must be|not actionable|healthy published|human candidate selection|human-selected|unknown target_run_id|target does not match/.test(error.message);
+        || /required|unknown diligence task|already complete|must be|not actionable|healthy published|human candidate selection|human-selected|unknown target_run_id|does not match target_run_id|target_run_id is missing canonical/.test(error.message);
       sendJson(response, clientError ? 400 : 500, { error: error.message });
     } finally {
       requestSpan.end();

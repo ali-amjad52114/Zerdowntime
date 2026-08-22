@@ -56,6 +56,15 @@ test('renders a safe empty state and escapes untrusted research content', () => 
   assert.match(html, /Hand off to X\/Y\/Z/);
 });
 
+test('generic discovery UI has no AATD placeholder and exposes pocket source, version, and mode', () => {
+  const html = renderDiscoveryView();
+  assert.match(html, /placeholder="e\.g\. glioblastoma"/);
+  assert.doesNotMatch(html, /Alpha-1 Antitrypsin|\bAATD\b/);
+  assert.match(html, /pockets_provenance\?\.engine/);
+  assert.match(html, /pockets_provenance\?\.version/);
+  assert.match(html, /pockets_provenance\?\.mode/);
+});
+
 test('renders the native discovery dossier ranking and classified exact passages', () => {
   const html = renderDiscoveryView({
     candidates: [{
