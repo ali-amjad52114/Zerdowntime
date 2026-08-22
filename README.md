@@ -1,6 +1,21 @@
 # Zero Downtime Factory
 
-Integration-first scaffold for the Zero Downtime Hackathon. The current single-page collector is a neutral fixture used to prove Bright Data Scraper Studio operation while the product idea is still open.
+Integration-first scaffold for the Zero Downtime Hackathon. The current single-page collector is a neutral fixture used to prove Bright Data Scraper Studio operation while the product idea is still open. Port catalog definitions and the delivery workflow use only product-neutral briefs and normalized integration contracts.
+
+## Port delivery path
+
+The version-controlled Port model is in `port/`. It catalogs project context and replaceable services, accepts a brief/change, records a derived plan, runs build and test stages, and stops at a separate Port-native manual approval action before release. Every local run writes an ignored audit artifact under `artifacts/port/<run-id>/run.json`.
+
+Run the credential-free validation and tests:
+
+```sh
+npm ci
+npm run port:smoke
+npm run port:prepare
+npm run port:release
+```
+
+See `port/README.md` for the failure/retry/revision drill, Port account setup, and the exact boundary between locally validated artifacts and account-required verification.
 
 ## Bright Data setup
 

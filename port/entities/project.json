@@ -1,0 +1,12 @@
+{
+  "identifier": "zero-downtime-factory",
+  "title": "Zero Downtime Factory",
+  "properties": {
+    "summary": "A product-neutral factory for proving sponsor integrations before a final product is selected.",
+    "goals": ["Repeatable delivery", "Observable sponsor integrations", "Auditable human control"],
+    "constraints": ["No committed credentials", "Product idea remains replaceable", "Release requires approval"],
+    "technical_choices": ["Repository-owned Port model", "Structured records at integration boundaries", "OpenTelemetry-compatible correlation IDs"],
+    "risks": ["Sponsor accounts may be unavailable", "External schemas can drift", "A release must not bypass human review"]
+  },
+  "relations": {}
+}

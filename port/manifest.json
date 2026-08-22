@@ -1,0 +1,18 @@
+{
+  "apiVersion": "zero-downtime-factory/v1",
+  "blueprints": [
+    "blueprints/project.json",
+    "blueprints/service.json",
+    "blueprints/workflow-run.json",
+    "blueprints/decision.json"
+  ],
+  "entities": [
+    { "blueprint": "zdProject", "file": "entities/project.json" },
+    { "blueprint": "zdService", "file": "entities/services.json" }
+  ],
+  "actions": [
+    "actions/submit-change.json",
+    "actions/release-change.json",
+    "actions/retry-run.json"
+  ]
+}

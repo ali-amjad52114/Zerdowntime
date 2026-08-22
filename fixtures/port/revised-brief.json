@@ -1,0 +1,7 @@
+{
+  "title": "Neutral structured-record change with recovery",
+  "summary": "Consume fresh normalized records and prove bounded recovery from a schema failure.",
+  "goals": ["Preserve the normalized-record boundary", "Produce auditable automated evidence", "Escalate after the retry budget"],
+  "constraints": ["Do not commit credentials", "Keep the data provider replaceable", "Retain the correlation identifier across retries"],
+  "acceptance_criteria": ["A validated record reaches the consumer", "A controlled failure is visible", "The run stops before release until a human approves"]
+}

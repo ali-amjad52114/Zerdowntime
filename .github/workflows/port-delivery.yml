@@ -1,0 +1,71 @@
+name: Port delivery workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: prepare, retry, or release
+        required: true
+        type: string
+      port_run_id:
+        description: Port action run used for audit correlation
+        required: true
+        type: string
+      workflow_run_id:
+        description: Stable delivery workflow run identifier
+        required: true
+        type: string
+      brief_json:
+        description: Product-neutral brief JSON
+        required: true
+        type: string
+      plan_hash:
+        description: Expected plan hash for release
+        required: false
+        type: string
+      state_json:
+        description: Current workflow-run entity properties for retry/release hydration
+        required: false
+        type: string
+
+jobs:
+  delivery:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PORT_BRIEF_JSON: ${{ inputs.brief_json }}
+      PORT_STATE_JSON: ${{ inputs.state_json }}
+      PORT_CLIENT_ID: ${{ secrets.PORT_CLIENT_ID }}
+      PORT_CLIENT_SECRET: ${{ secrets.PORT_CLIENT_SECRET }}
+      PORT_GITHUB_ORG: ${{ github.repository_owner }}
+      PORT_GITHUB_REPO: ${{ github.event.repository.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run port:validate
+      - id: workflow
+        continue-on-error: true
+        shell: bash
+        run: |
+          extra=()
+          if [[ "${{ inputs.operation }}" == "release" ]]; then
+            extra+=(--decision approve --actor port-approver --expected-plan-hash "${{ inputs.plan_hash }}")
+          fi
+          node scripts/port-workflow.mjs "${{ inputs.operation }}" --run-id "${{ inputs.workflow_run_id }}" "${extra[@]}"
+      - name: Sync run entity and attach it to the Port action audit
+        if: always() && env.PORT_CLIENT_ID != '' && env.PORT_CLIENT_SECRET != ''
+        run: node scripts/port-sync.mjs --live --run-file "artifacts/port/${{ inputs.workflow_run_id }}/run.json" --port-run-id "${{ inputs.port_run_id }}"
+      - name: Preserve local audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: port-run-${{ inputs.workflow_run_id }}
+          path: artifacts/port/${{ inputs.workflow_run_id }}/run.json
+      - name: Propagate workflow result after audit sync
+        if: steps.workflow.outcome == 'failure'
+        run: exit 1
