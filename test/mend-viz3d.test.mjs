@@ -158,3 +158,24 @@ test('every 3D chart is followed by a collapsed fallback table with the exact va
     assert.match(markup, /<table>/);
   }
 });
+
+test('bars3d cells can override the chart-wide colour with a fixed tone, per cell', () => {
+  const cells = [
+    { xCategory: 'A', yCategory: 'P', z: 4, tone: 'ok', title: 'beneficial' },
+    { xCategory: 'B', yCategory: 'Q', z: 4, tone: 'risk', title: 'harmful' },
+    { xCategory: 'A', yCategory: 'Q', z: 4, title: 'default tone' },
+  ];
+  const markup = bars3d(cells, { ...BARS_OPTS, topColorVar: 'var(--struct)' });
+  assert.match(markup, /var\(--ok\)/);
+  assert.match(markup, /var\(--bars3d-ok-side-l\)/);
+  assert.match(markup, /var\(--risk\)/);
+  assert.match(markup, /var\(--bars3d-risk-side-l\)/);
+  // The cell with no tone still falls back to the chart's own default colour.
+  assert.match(markup, /var\(--struct\)/);
+});
+
+test('an unknown tone falls back to the chart-wide default rather than breaking', () => {
+  const markup = bars3d([{ xCategory: 'A', yCategory: 'P', z: 4, tone: 'not-a-real-tone', title: 't' }], { ...BARS_OPTS, topColorVar: 'var(--warn)' });
+  assert.match(markup, /var\(--warn\)/);
+  assert.doesNotMatch(markup, /not-a-real-tone/);
+});

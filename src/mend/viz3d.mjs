@@ -23,6 +23,19 @@ const SIN30 = Math.sin(Math.PI / 6);
 const CATEGORY_CAP = 8;
 const POINT_CAP = 10;
 
+/**
+ * `bars3d` cells may set a `tone` to override the chart's default column colour on a
+ * per-cell basis — e.g. one grid where some cells read as beneficial and others as harmful.
+ * A tone is a fixed lookup, never an arbitrary colour string, so every cell still resolves to
+ * a themed CSS variable triple rather than an inline hex value.
+ */
+const TONE_PALETTE = Object.freeze({
+  struct: Object.freeze({ top: 'var(--struct)', left: 'var(--bars3d-side-l)', right: 'var(--bars3d-side-r)' }),
+  ok: Object.freeze({ top: 'var(--ok)', left: 'var(--bars3d-ok-side-l)', right: 'var(--bars3d-ok-side-r)' }),
+  risk: Object.freeze({ top: 'var(--risk)', left: 'var(--bars3d-risk-side-l)', right: 'var(--bars3d-risk-side-r)' }),
+  neutral: Object.freeze({ top: 'var(--ink-3)', left: 'var(--bars3d-neutral-side-l)', right: 'var(--bars3d-neutral-side-r)' }),
+});
+
 /** The one projection every chart in this module uses. x/y recede into the floor, z rises. */
 function project(x, y, z, scale) {
   return [(x - y) * COS30 * scale, (x + y) * SIN30 * scale - z * scale];
@@ -278,12 +291,12 @@ export function bars3d(cells, {
   }
 
   const xLabelSvg = shownXCategories.map((category, index) => {
-    const [lx, ly] = project(index, ySpan[1] + 0.9, 0, scale);
+    const [lx, ly] = project(index, ySpan[1] + 1.5, 0, scale);
     bounds.includeLabel(lx, ly, category, { above: false });
     return { x: lx, y: ly, text: category };
   });
   const yLabelSvg = shownYCategories.map((category, index) => {
-    const [lx, ly] = project(xSpan[1] + 0.7, index, 0, scale);
+    const [lx, ly] = project(xSpan[1] + 1.5, index, 0, scale);
     bounds.includeLabel(lx, ly, category, { above: false });
     return { x: lx, y: ly, text: category, anchor: 'start' };
   });
@@ -323,9 +336,10 @@ export function bars3d(cells, {
 
   const columnSvg = columns.map(({ cell, corners }) => {
     const title = escapeHtml(cell.title ?? `${cell.xCategory} · ${cell.yCategory}: ${num(cell.z, 2)} ${zLabel}`);
-    const leftFace = `<polygon points="${at(corners.leftFloor)} ${at(corners.nearFloor)} ${at(corners.nearRoof)} ${at(corners.leftRoof)}" fill="${sideLeftColorVar}"><title>${title}</title></polygon>`;
-    const rightFace = `<polygon points="${at(corners.rightFloor)} ${at(corners.nearFloor)} ${at(corners.nearRoof)} ${at(corners.rightRoof)}" fill="${sideRightColorVar}"><title>${title}</title></polygon>`;
-    const topFace = `<polygon points="${at(corners.leftRoof)} ${at(corners.nearRoof)} ${at(corners.rightRoof)} ${at(corners.farRoof)}" fill="${topColorVar}"><title>${title}</title></polygon>`;
+    const palette = cell.tone && TONE_PALETTE[cell.tone] ? TONE_PALETTE[cell.tone] : { top: topColorVar, left: sideLeftColorVar, right: sideRightColorVar };
+    const leftFace = `<polygon points="${at(corners.leftFloor)} ${at(corners.nearFloor)} ${at(corners.nearRoof)} ${at(corners.leftRoof)}" fill="${palette.left}"><title>${title}</title></polygon>`;
+    const rightFace = `<polygon points="${at(corners.rightFloor)} ${at(corners.nearFloor)} ${at(corners.nearRoof)} ${at(corners.rightRoof)}" fill="${palette.right}"><title>${title}</title></polygon>`;
+    const topFace = `<polygon points="${at(corners.leftRoof)} ${at(corners.nearRoof)} ${at(corners.rightRoof)} ${at(corners.farRoof)}" fill="${palette.top}"><title>${title}</title></polygon>`;
     // Fixed local face order: left, right, top — so a shared edge between neighbouring
     // columns is always overpainted the same way regardless of which cell sorted where.
     return `${leftFace}${rightFace}${topFace}`;
