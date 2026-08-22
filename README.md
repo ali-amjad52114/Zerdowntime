@@ -27,7 +27,9 @@ See `port/README.md` for the failure/retry/revision drill, Port account setup, a
 
 The validated JSON artifact is written to `artifacts/brightdata/latest.json` and is ignored by Git.
 
-See `SMOKE_TESTS.md` for sponsor acceptance criteria and `CODEX.md` for reusable Bright Data rules.
+See `docs/MEND_MVP_SPEC.md` for the agentic software-factory product contract,
+`SMOKE_TESTS.md` for sponsor acceptance criteria, and `CODEX.md` for reusable
+Bright Data rules.
 
 ## SigNoz / OpenTelemetry
 
