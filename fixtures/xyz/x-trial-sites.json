@@ -1,0 +1,53 @@
+{
+  "fixture_notice": "Synthetic, deterministic ClinicalTrials.gov-shaped study records for the site-geography rollup; identifiers, sponsors and facilities are invented and this is not a registry extract.",
+  "source_name": "Mend deterministic trial site fixture",
+  "studies": [
+    {
+      "source_url": "https://trials.example.invalid/study/FIXTURE-AATD-01",
+      "protocolSection": {
+        "identificationModule": { "nctId": "FIXTURE-AATD-01", "briefTitle": "Fixture multi-region study of an AAT corrector" },
+        "statusModule": { "overallStatus": "RECRUITING" },
+        "designModule": { "phases": ["PHASE2"] },
+        "sponsorCollaboratorsModule": { "leadSponsor": { "name": "Example Therapeutics One", "class": "INDUSTRY" } },
+        "contactsLocationsModule": {
+          "locations": [
+            { "facility": "Fixture Site A", "city": "Boston", "state": "Massachusetts", "country": "United States" },
+            { "facility": "Fixture Site B", "city": "Toronto", "country": "Canada" },
+            { "facility": "Fixture Site C", "city": "Hamburg", "country": "Germany" },
+            { "facility": "Fixture Site D", "city": "Sao Paulo", "country": "Brazil" }
+          ]
+        }
+      }
+    },
+    {
+      "source_url": "https://trials.example.invalid/study/FIXTURE-AATD-02",
+      "protocolSection": {
+        "identificationModule": { "nctId": "FIXTURE-AATD-02", "briefTitle": "Fixture cross-Pacific study of AAT augmentation" },
+        "statusModule": { "overallStatus": "ACTIVE_NOT_RECRUITING" },
+        "designModule": { "phases": ["PHASE1", "PHASE2"] },
+        "sponsorCollaboratorsModule": { "leadSponsor": { "name": "Example Therapeutics Two", "class": "INDUSTRY" } },
+        "contactsLocationsModule": {
+          "locations": [
+            { "facility": "Fixture Site E", "city": "Osaka", "country": "Japan" },
+            { "facility": "Fixture Site F", "city": "Melbourne", "country": "Australia" },
+            { "facility": "Fixture Site G", "city": "Rochester", "state": "Minnesota", "country": "United States" }
+          ]
+        }
+      }
+    },
+    {
+      "source_url": "https://trials.example.invalid/study/FIXTURE-AATD-03",
+      "protocolSection": {
+        "identificationModule": { "nctId": "FIXTURE-AATD-03", "briefTitle": "Fixture single-country registry study" },
+        "statusModule": { "overallStatus": "RECRUITING" },
+        "designModule": { "phases": ["NA"] },
+        "sponsorCollaboratorsModule": { "leadSponsor": { "name": "Example University Hospital", "class": "OTHER" } },
+        "contactsLocationsModule": {
+          "locations": [
+            { "facility": "Fixture Site H", "city": "Munich", "country": "Germany" }
+          ]
+        }
+      }
+    }
+  ]
+}
