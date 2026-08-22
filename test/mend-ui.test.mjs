@@ -17,16 +17,29 @@ async function runs() {
 test('the view presents five panels mapped onto the three existing axes', async () => {
   const { healthy } = await runs();
   const html = renderTargetView(healthy);
+  const core = html.slice(0, html.indexOf('Derived / downstream'));
   for (const title of [
     'Target', 'Cryo-EM and mass', 'Subcellular location', 'Market and CMC', 'Orphan status and exclusivity',
   ]) {
-    assert.match(html, new RegExp(`<h3>${title}`), `missing panel: ${title}`);
+    assert.match(core, new RegExp(`<h3>${title}`), `missing panel: ${title}`);
   }
-  assert.equal(html.match(/class="panel /g).length, 5);
+  assert.equal(core.match(/class="panel /g).length, 5);
   assert.match(html, /X — pipeline activity/);
   assert.match(html, /Y — structural readiness/);
   assert.match(html, /Z — IP activity/);
   assert.doesNotMatch(html, /W axis|fourth axis/);
+});
+
+test('five further sections are derived from the same five panels, not a sixth axis', async () => {
+  const { healthy } = await runs();
+  const html = renderTargetView(healthy);
+  const downstream = html.slice(html.indexOf('Derived / downstream'));
+  for (const title of ['Product positioning', 'Go-to-market strategy', 'Insight generalization', 'Revenue — illustrative planning model', 'Resourcing']) {
+    assert.match(downstream, new RegExp(`<h3>${title}`), `missing downstream panel: ${title}`);
+  }
+  assert.equal(downstream.match(/class="panel /g).length, 5);
+  assert.match(html, /Factory line/);
+  assert.doesNotMatch(html, /Gaucher|Fabry|Pompe/i);
 });
 
 test('the run trace shows every stage with its gate, records and status', async () => {
@@ -52,14 +65,26 @@ test('a degraded stage says so on the page and gives the reason', async () => {
   assert.match(html, /5 released/);
 });
 
-test('all four visualisations render from real axis output', async () => {
+test('all four core visualisations render from real axis output', async () => {
   const { healthy } = await runs();
   const html = renderTargetView(healthy);
-  assert.match(html, /Cell cross-section highlighting Secreted/);
-  assert.match(html, /Structure resolutions by experimental method/);
-  assert.match(html, /Protein sequence map over 418 residues/);
-  assert.match(html, /class="barfill"/);
-  assert.equal(html.match(/<svg/g).length, 3);
+  const core = html.slice(0, html.indexOf('Derived / downstream'));
+  assert.match(core, /Cell cross-section highlighting Secreted/);
+  assert.match(core, /Structure resolutions by experimental method/);
+  assert.match(core, /Protein sequence map over 418 residues/);
+  assert.match(core, /class="barfill"/);
+  // 3 core 2D svg charts + 1 factory-line svg = 4 svgs before the downstream section starts.
+  assert.equal(core.match(/<svg/g).length, 4);
+});
+
+test('the five downstream sections render their 3D charts from real and illustrative data alike', async () => {
+  const { healthy } = await runs();
+  const html = renderTargetView(healthy);
+  const downstream = html.slice(html.indexOf('Derived / downstream'));
+  assert.match(downstream, /Product positioning by stage/i);
+  assert.equal((downstream.match(/class="viz3d"/g) || []).length, 5);
+  assert.match(downstream, /class="tag computed"/);
+  assert.match(downstream, /class="tag illustrative"/);
 });
 
 test('curated tables are labelled as curated on screen, not in the JSON only', async () => {
@@ -106,4 +131,33 @@ test('the page is self-contained and theme-aware', async () => {
   assert.match(html, /prefers-color-scheme:dark/);
   assert.doesNotMatch(html, /<script/);
   assert.doesNotMatch(html, /https?:\/\/[^"']*\.(?:js|css)/);
+});
+
+test('a degraded core stage visibly propagates into the downstream sections that depend on it, and leaves the rest released', async () => {
+  const { degraded } = await runs();
+  const html = renderTargetView(degraded);
+  const downstream = html.slice(html.indexOf('Derived / downstream'));
+  // Product positioning, insight generalization, revenue and resourcing all read X.
+  assert.equal((downstream.match(/class="panel p-degraded"/g) || []).length, 4);
+  assert.match(downstream, /Gate reported: X returned no evidence records/);
+  // Go-to-market reads X.site_geography and Z.orphan_exclusivity, neither of which degraded.
+  const gtmStart = downstream.indexOf('<h3>Go-to-market strategy');
+  const gtmPanel = downstream.slice(downstream.lastIndexOf('<article', gtmStart), downstream.indexOf('</article>', gtmStart) + 10);
+  assert.match(gtmPanel, /class="panel p-released"|class="panel "/);
+  assert.doesNotMatch(gtmPanel, /p-degraded/);
+});
+
+test('a true first-run failure (no previous healthy snapshot) blocks the dependent downstream sections instead of rendering thin data', async () => {
+  const axisRunners = await createDemoAxisRunners();
+  const firstFailure = await runVerticalSlice({ axisRunners, mode: 'break-x', runId: 'ui-first-failure', factoryVersion: 'v1' });
+  assert.equal(firstFailure.axes.X.status, 'UNAVAILABLE');
+  const html = renderTargetView(firstFailure);
+  const downstream = html.slice(html.indexOf('Derived / downstream'));
+  assert.match(downstream, /class="panel p-blocked"/);
+  assert.match(downstream, /Blocked — depends on/);
+  // No fabricated chart numbers: the positioning panel's own chart must degrade to a caption.
+  const positioningStart = downstream.indexOf('<h3>Product positioning');
+  const positioningPanel = downstream.slice(downstream.lastIndexOf('<article', positioningStart), downstream.indexOf('</article>', positioningStart) + 10);
+  assert.doesNotMatch(positioningPanel, /<svg/);
+  assert.match(positioningPanel, /class="vcap"/);
 });

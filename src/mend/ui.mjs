@@ -2,6 +2,16 @@ import { caption, escapeHtml } from './html.mjs';
 import { buildRunTrace } from './run-trace.mjs';
 import { costFor, modalityMix } from './reference-tables.mjs';
 import { cellDiagram, regionBars, resolutionPlot, sequenceTrack } from './viz.mjs';
+import { bars3d, ribbon3d, scatter3d } from './viz3d.mjs';
+import {
+  buildGoToMarket,
+  buildInsightGeneralization,
+  buildProductPositioning,
+  buildResourcing,
+  buildRevenueForecast,
+} from './downstream.mjs';
+import { rollupAllDownstream } from './downstream-status.mjs';
+import { factoryLine } from './factory-line.mjs';
 
 /**
  * The one-page answer view.
@@ -25,6 +35,7 @@ const STAGE_WORDS = {
   released: 'released',
   degraded: 'degraded',
   failed: 'failed',
+  blocked: 'blocked',
 };
 
 function axisOf(run, axis) {
@@ -51,6 +62,23 @@ function chips(items) {
 
 function curatedTag(text = 'curated') {
   return `<span class="tag curated" title="Curated reference table with a cited basis, not a live source.">${escapeHtml(text)}</span>`;
+}
+
+/**
+ * `computed` and `illustrative` distinguish the two kinds of number the downstream sections
+ * produce: a deterministic formula over this run's own real axis output needs no citation
+ * (the inputs are the citation), while an illustrative planning constant is a modeling choice
+ * and must never be mistaken for either a cited fact or a degraded stage — hence its own
+ * `--illustrative` token, never the `--warn` used for "this stage degraded."
+ */
+function kindTag(kind) {
+  return kind === 'illustrative'
+    ? '<span class="tag illustrative" title="Uses at least one illustrative planning assumption — a modeling choice, never presented as a cited fact. See the basis note below.">illustrative</span>'
+    : '<span class="tag computed" title="A deterministic formula over this run\'s own real axis output. No citation needed — the inputs are the citation.">computed</span>';
+}
+
+function basisNote(basis, dependsOn) {
+  return `<p class="vcap">${escapeHtml(basis ?? '')}</p><p class="mono">reads: ${escapeHtml((dependsOn ?? []).join(', '))}</p>`;
 }
 
 function evidenceList(records, { limit = 12 } = {}) {
@@ -286,16 +314,102 @@ ${ip.disclaimer ? `<p class="vcap">${escapeHtml(ip.disclaimer)}</p>` : ''}`;
   });
 }
 
+/**
+ * The five downstream/derived sections. Each reads its data from `downstream.mjs`'s pure
+ * builders and its status from `downstream-status.mjs`'s rollup — the same `panel()` helper
+ * every core panel already uses, unchanged, because the rollup's shape matches a run-trace
+ * stage exactly. A `blocked` section still calls its builder: with the empty axis data a
+ * blocked dependency actually produces, the builder's own honest "no data" message becomes
+ * the chart's caption — no separate fabricated placeholder is needed.
+ */
+
+function positioningPanel({ x, rollup }) {
+  const result = buildProductPositioning({ x });
+  const body = `${kindTag(result.kind)}
+${scatter3d(result.points, { ariaLabel: 'Product positioning by stage, differentiation and manufacturing simplicity', xLabel: result.xLabel, yLabel: result.yLabel, zLabel: result.zLabel, colorVar: 'var(--struct)' })}
+${result.message ? caption(result.message) : ''}
+${result.excludedNoModality?.length ? caption(`Not plotted, no matched modality: ${result.excludedNoModality.join(', ')}.`) : ''}`;
+  return panel({
+    number: '6', title: 'Product positioning', source: 'Derived from X — pipeline activity', stage: rollup, body,
+    evidence: basisNote(result.basis, rollup.dependsOn),
+  });
+}
+
+function goToMarketPanel({ geography, orphan, rollup }) {
+  const result = buildGoToMarket({ geography, orphan });
+  const body = `${kindTag(result.kind)}
+${bars3d(result.cells, { ariaLabel: 'Go-to-market priority by region and channel', xCategories: result.xCategories, yCategories: result.yCategories, xLabel: result.xLabel, yLabel: result.yLabel, zLabel: result.zLabel, topColorVar: 'var(--struct)' })}
+${result.message ? caption(result.message) : ''}`;
+  return panel({
+    number: '7', title: 'Go-to-market strategy', source: 'Derived from X.site_geography and Z.orphan_exclusivity', stage: rollup, body,
+    evidence: basisNote(result.basis, rollup.dependsOn),
+  });
+}
+
+function generalizationPanel({ x, geography, y, identity, orphan, rollup }) {
+  const result = buildInsightGeneralization({ x, geography, y, identity, orphan });
+  const body = `${kindTag(result.kind)}
+<p class="note">${escapeHtml(result.scope ?? '')}</p>
+${bars3d(result.cells, { ariaLabel: 'Insight generalization triangulation scorecard', xCategories: result.xCategories, yCategories: result.yCategories, xLabel: result.xLabel, yLabel: result.yLabel, zLabel: result.zLabel, topColorVar: 'var(--ok)' })}`;
+  return panel({
+    number: '8', title: 'Insight generalization', source: 'Derived from all five core stages', stage: rollup, body,
+    evidence: basisNote('A triangulation scorecard over this run\'s own six real signals — never a claim about any other disease or program.', rollup.dependsOn),
+  });
+}
+
+function revenuePanel({ x, orphan, disease, rollup }) {
+  const result = buildRevenueForecast({ x, orphan, disease });
+  const body = `${kindTag(result.kind)}
+${ribbon3d(result.lanes, { ariaLabel: 'Revenue illustrative planning model by year and scenario', xLabel: result.xLabel, zLabel: result.zLabel, bandBetween: result.bandBetween, cliffAt: result.cliffAt })}
+${result.message ? caption(result.message) : ''}
+${result.addressablePopulation ? `<p class="note">Addressable population ${escapeHtml(result.addressablePopulation.toLocaleString('en-US'))} (cited) × ${escapeHtml(Math.round((result.diagnosedShare ?? 0) * 100))}% diagnosed-and-reachable share (illustrative) × an access ramp (illustrative) × ~$${escapeHtml(Math.round((result.priceAnnualUsd ?? 0) / 1000))}k per patient per year, price direction set by this run's dominant modality (${escapeHtml(result.dominantModality ?? 'unmatched')}).</p>` : ''}`;
+  return panel({
+    number: '9', title: 'Revenue — illustrative planning model', source: 'Derived from X and Z.orphan_exclusivity, anchored on cited reference tables', stage: rollup, body,
+    evidence: basisNote(result.basis, rollup.dependsOn),
+  });
+}
+
+function resourcingPanel({ x, rollup }) {
+  const result = buildResourcing({ x });
+  const body = `${kindTag(result.kind)}
+${bars3d(result.cells, { ariaLabel: 'Resourcing headcount by phase and function', xCategories: result.xCategories, yCategories: result.yCategories, xLabel: result.xLabel, yLabel: result.yLabel, zLabel: result.zLabel, topColorVar: 'var(--warn)' })}
+${result.youAreHere ? caption(`You are here: ${result.youAreHere}, by this run's most advanced reported stage.`) : ''}`;
+  return panel({
+    number: '10', title: 'Resourcing', source: 'Derived from X — pipeline activity', stage: rollup, body,
+    evidence: basisNote(result.basis, rollup.dependsOn),
+  });
+}
+
+function downstreamSection(rollup) {
+  const rows = Object.values(rollup).map((entry) => `<tr class="t-${escapeHtml(entry.status)}">
+<td>${escapeHtml(entry.label)}</td>
+<td><span class="pstatus s-${escapeHtml(entry.status)}">${escapeHtml(STAGE_WORDS[entry.status] ?? entry.status)}</span></td>
+<td class="mono">${escapeHtml(entry.dependsOn.join(', '))}</td>
+<td>${entry.note ? escapeHtml(entry.note) : 'no issues reported'}</td>
+</tr>`).join('');
+
+  return `<section class="trace">
+<div class="tracehead"><h2>Derived / downstream</h2></div>
+<p class="sub">Five views built from what the five stages above already produced — not a sixth stage the factory validates, a UI-level read of the same run.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Section</th><th>Status</th><th>Reads</th><th>Reported</th></tr></thead>
+<tbody>${rows}</tbody>
+</table></div>
+</section>`;
+}
+
 const STYLES = `
 :root{
 --paper:#F1F3F0;--panel:#FBFCFA;--ink:#131A17;--ink-2:#4C574F;--ink-3:#7C877E;
 --rule:#D7DCD4;--rule-2:#C2C9BE;
 --ok:#1B6B4C;--ok-bg:#E4EFE8;--warn:#8A5300;--warn-bg:#F6EDDD;--risk:#A33C1E;--risk-bg:#F6E8E2;
 --struct:#2E4EA8;--struct-bg:#E6EAF6;
+--illustrative:#6D4C9F;--illustrative-bg:#EFE8F7;
 --loc-on:var(--struct-bg);--loc-on-line:var(--struct);--loc-on-text:var(--struct);
 --loc-off:transparent;--loc-off-line:var(--rule-2);
 --vseq-backbone:var(--rule-2);--vseq-variant:#A33C1E;--vseq-domain:#2E4EA8;--vseq-signal:#8A5300;
 --vres-em:#2E4EA8;--vres-xray:#8A5300;--vres-other:#7C877E;--vres-line:#A33C1E;
+--bars3d-side-l:#B7C3EA;--bars3d-side-r:#8DA0DD;
 --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
 --body:"Inter Tight",system-ui,-apple-system,sans-serif;
 }
@@ -304,8 +418,10 @@ const STYLES = `
 --rule:#26302B;--rule-2:#38443D;
 --ok:#6DC79E;--ok-bg:#16281F;--warn:#D9A24E;--warn-bg:#2A2115;--risk:#E08A6A;--risk-bg:#2B1B14;
 --struct:#8FA9E8;--struct-bg:#171E30;
+--illustrative:#B69FE0;--illustrative-bg:#241C33;
 --vseq-variant:#E08A6A;--vseq-domain:#8FA9E8;--vseq-signal:#D9A24E;
 --vres-em:#8FA9E8;--vres-xray:#D9A24E;--vres-other:#9AA79F;--vres-line:#E08A6A;
+--bars3d-side-l:#3A4A78;--bars3d-side-r:#2A3860;
 }}
 *{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);line-height:1.5}
@@ -329,9 +445,10 @@ th{text-align:left;font-weight:600;color:var(--ink-2);font-size:11px;letter-spac
 td{padding:9px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
 tr.stalled td{background:var(--risk-bg)}
 .panels{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+.panels-downstream{display:grid;grid-template-columns:1fr;gap:18px}
 .panel{background:var(--panel);border:1px solid var(--rule);border-radius:14px;padding:22px}
 .panel.p-degraded{border-color:var(--warn)}
-.panel.p-failed{border-color:var(--risk)}
+.panel.p-failed,.panel.p-blocked{border-color:var(--risk)}
 .panel:nth-child(1),.panel:nth-child(4),.panel:nth-child(5){grid-column:1/-1}
 .panelhead{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
 .panelhead>div:first-child{display:flex;gap:10px;align-items:baseline}
@@ -342,7 +459,7 @@ tr.stalled td{background:var(--risk-bg)}
 .pstatus{font-family:var(--mono);font-size:11px;padding:3px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.06em}
 .s-released{background:var(--ok-bg);color:var(--ok)}
 .s-degraded{background:var(--warn-bg);color:var(--warn)}
-.s-failed{background:var(--risk-bg);color:var(--risk)}
+.s-failed,.s-blocked{background:var(--risk-bg);color:var(--risk)}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:16px}
 .stat{border-left:2px solid var(--rule-2);padding-left:12px}
 .statlab{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
@@ -351,6 +468,10 @@ tr.stalled td{background:var(--risk-bg)}
 .note{font-size:13px;color:var(--ink-2);background:var(--struct-bg);border-left:2px solid var(--struct);padding:10px 12px;border-radius:0 6px 6px 0}
 .viz{margin:12px 0}
 .viz svg{width:100%;height:auto;display:block}
+.viz3d{margin:12px 0}
+.viz3d svg{width:100%;height:auto;display:block;max-height:340px}
+.factoryline{margin:14px 0}
+.factoryline svg{width:100%;height:auto;display:block}
 .vcap{font-size:12px;color:var(--ink-3);margin:8px 0 0}
 .vcap.flagged,.geostats .flagged{color:var(--risk)}
 .vtiny{font-size:8px;font-family:var(--mono)}
@@ -364,7 +485,8 @@ tr.stalled td{background:var(--risk-bg)}
 .chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
 .chip{font-size:11px;font-family:var(--mono);border:1px solid var(--rule-2);border-radius:999px;padding:3px 9px;color:var(--ink-2)}
 .tag{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.07em;padding:2px 7px;border-radius:999px;margin-left:8px;vertical-align:middle}
-.tag.curated{background:var(--struct-bg);color:var(--struct)}
+.tag.curated,.tag.computed{background:var(--struct-bg);color:var(--struct)}
+.tag.illustrative{background:var(--illustrative-bg);color:var(--illustrative)}
 .tag.warn{background:var(--warn-bg);color:var(--warn)}
 .tag.risk{background:var(--risk-bg);color:var(--risk)}
 .costcard{border:1px solid var(--rule);border-radius:10px;padding:16px;background:var(--paper)}
@@ -441,11 +563,27 @@ export function renderTargetView(run) {
     orphanPanel({ z, orphan, stage: stageOf('Z.orphan_exclusivity') }),
   ].join('');
 
+  const downstreamRollup = rollupAllDownstream(trace);
+  const downstreamPanels = [
+    positioningPanel({ x, rollup: downstreamRollup.product_positioning }),
+    goToMarketPanel({ geography, orphan, rollup: downstreamRollup.go_to_market }),
+    generalizationPanel({ x, geography, y, identity, orphan, rollup: downstreamRollup.insight_generalization }),
+    revenuePanel({ x, orphan, disease: DISEASE, rollup: downstreamRollup.revenue_forecast }),
+    resourcingPanel({ x, rollup: downstreamRollup.resourcing }),
+  ].join('');
+
   return page({
     title: `Mend — ${TARGET}/AATD`,
     content: `${header(trace)}
+<section class="trace">
+<div class="tracehead"><h2>Factory line</h2></div>
+<p class="sub">Disease name in, five stations, five derived products — a break in any station is visible all the way through.</p>
+${factoryLine(trace, downstreamRollup)}
+</section>
 ${traceSection(trace)}
 <section class="panels">${panels}</section>
-<footer>Five panels over three axes: X — pipeline activity, Y — structural readiness, Z — IP activity and orphan exclusivity. Curated tables carry a cited basis and are not live sources. Designation is not approval, exclusivity accrues on approval, and none of this is legal or regulatory advice.</footer>`,
+${downstreamSection(downstreamRollup)}
+<section class="panels panels-downstream">${downstreamPanels}</section>
+<footer>Five panels over three axes: X — pipeline activity, Y — structural readiness, Z — IP activity and orphan exclusivity. Five derived sections below read the same five panels; a computed value is a formula over this run's own data, an illustrative value is a disclosed planning assumption, and neither is a forecast of actual performance. Curated tables carry a cited basis and are not live sources. Designation is not approval, exclusivity accrues on approval, and none of this is legal, regulatory or investment advice.</footer>`,
   });
 }
