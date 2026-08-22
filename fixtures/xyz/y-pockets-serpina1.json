@@ -1,0 +1,25 @@
+{
+  "target": "SERPINA1",
+  "uniprot_id": "P01009",
+  "pockets_source": "fixture",
+  "pockets": [
+    {
+      "rank": 1,
+      "score": 12.4,
+      "probability": 0.91,
+      "residues": ["A:34", "A:38", "A:112"]
+    },
+    {
+      "rank": 2,
+      "score": 8.7,
+      "probability": 0.74,
+      "residues": ["A:290", "A:342", "A:384"]
+    },
+    {
+      "rank": 3,
+      "score": 5.6,
+      "probability": 0.51,
+      "residues": ["A:53", "A:54", "A:347"]
+    }
+  ]
+}

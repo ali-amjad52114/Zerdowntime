@@ -6,6 +6,7 @@ import { loadLocalEnv } from '../scripts/env.mjs';
 import { createTelemetry } from './telemetry.mjs';
 import { runPipeline } from './pipeline.mjs';
 import { normalizeWebRecords } from './records.mjs';
+import { analyzeTarget, cacheAnalysis, resolveStructurePath } from './axes/y/analyze.mjs';
 import { createDemoAxisRunners } from './mend/demo.mjs';
 import { completeDiligenceTask, createDiligenceWorkflow, recordDiligenceDecision } from './mend/diligence.mjs';
 import { healthySnapshot, runVerticalSlice } from './mend/vertical-slice.mjs';
@@ -55,11 +56,15 @@ export function createApp({
   corpusDiscovery = discoverDiseaseCorpus,
   candidateDiscovery = discoverTargets,
   targetDiligence = runSelectedTargetDiligence,
+  targetAnalyze = analyzeTarget,
+  fetchImpl,
+  prankImpl,
 } = {}) {
   let latestMendRun = null;
   let latestDiligenceWorkflow = null;
   let previousHealthy = {};
   let discoveryState = emptyDiscoveryState();
+  const analysisCache = new Map();
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
     const requestSpan = telemetry.startSpan(`api.${request.method.toLowerCase()} ${url.pathname}`, {
@@ -68,6 +73,54 @@ export function createApp({
     try {
       if (request.method === 'GET' && url.pathname === '/health') {
         sendJson(response, 200, { ok: true, service: telemetry.serviceName });
+        return;
+      }
+      if (request.method === 'POST' && url.pathname === '/target/analyze') {
+        const body = await readJson(request);
+        const target = body.target;
+        const uniprot_id = body.uniprot_id;
+        const disease = body.disease;
+        const analyzeSpan = telemetry.startSpan('target.structure.analyze', {
+          'target.name': target ?? '',
+          'uniprot.id': uniprot_id ?? '',
+        }, requestSpan);
+        try {
+          const result = await targetAnalyze({ target, uniprot_id, disease, fetchImpl, prankImpl, cache: analysisCache });
+          analyzeSpan.setAttribute('structure.pdb_id', result.structure?.pdb_id ?? '');
+          analyzeSpan.setAttribute('structure.source', result.structure?.source ?? '');
+          cacheAnalysis(analysisCache, result);
+          sendJson(response, 200, result);
+        } catch (error) {
+          telemetry.failSpan(analyzeSpan, error);
+          throw error;
+        } finally {
+          analyzeSpan.end();
+        }
+        return;
+      }
+      const structureFileMatch = url.pathname.match(/^\/target\/([^/]+)\/structure$/);
+      if (request.method === 'GET' && structureFileMatch) {
+        const id = decodeURIComponent(structureFileMatch[1]);
+        const cached = analysisCache.get(id) ?? analysisCache.get(id.toUpperCase());
+        const pdbId = cached?.structure?.pdb_id ?? id;
+        try {
+          const pdb = await readFile(resolveStructurePath(pdbId));
+          response.writeHead(200, { 'content-type': 'chemical/x-pdb' });
+          response.end(pdb);
+        } catch {
+          sendJson(response, 404, { error: 'not found' });
+        }
+        return;
+      }
+      const analysisMatch = url.pathname.match(/^\/target\/([^/]+)\/analysis$/);
+      if (request.method === 'GET' && analysisMatch) {
+        const id = decodeURIComponent(analysisMatch[1]);
+        const cached = analysisCache.get(id) ?? analysisCache.get(id.toUpperCase());
+        if (!cached) {
+          sendJson(response, 404, { error: 'not found' });
+          return;
+        }
+        sendJson(response, 200, cached);
         return;
       }
       if (request.method === 'GET' && url.pathname === '/mend/target') {

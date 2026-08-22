@@ -1,3 +1,5 @@
+import { writeFile } from 'node:fs/promises';
+
 const DEFAULT_SEARCH_ENDPOINT = 'https://search.rcsb.org/rcsbsearch/v2/query';
 const DEFAULT_DATA_ENDPOINT = 'https://data.rcsb.org/graphql';
 const DEFAULT_ACCESSION = 'P01009';
@@ -226,6 +228,91 @@ export function summarizeStructureRecords(records) {
     disease_relevance: null,
     disease_relevance_note: 'Not inferred from target identity or structure availability.',
   };
+}
+
+function isExperimentalRecord(record) {
+  return Boolean(String(record?.experimental_method ?? '').trim());
+}
+
+function isLigandBound(record) {
+  return Array.isArray(record?.ligands) && record.ligands.length > 0;
+}
+
+function resolutionSortKey(record) {
+  return Number.isFinite(record?.resolution_angstrom) ? record.resolution_angstrom : Number.POSITIVE_INFINITY;
+}
+
+function releaseTime(record) {
+  const raw = record?.released_at ?? record?.release_date ?? record?.deposited_at ?? null;
+  if (raw == null || raw === '') return null;
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/** Rank normalized Y-axis records: experimental, ligand-bound, resolution, then recency. */
+export function rankBestStructure(records) {
+  if (!Array.isArray(records) || records.length === 0) return null;
+
+  return records.reduce((best, record) => {
+    if (best == null) return record;
+    const experimentalDelta = Number(isExperimentalRecord(record)) - Number(isExperimentalRecord(best));
+    if (experimentalDelta !== 0) return experimentalDelta > 0 ? record : best;
+    const ligandDelta = Number(isLigandBound(record)) - Number(isLigandBound(best));
+    if (ligandDelta !== 0) return ligandDelta > 0 ? record : best;
+    const resolutionDelta = resolutionSortKey(record) - resolutionSortKey(best);
+    if (resolutionDelta !== 0) return resolutionDelta < 0 ? record : best;
+    const recordTime = releaseTime(record);
+    const bestTime = releaseTime(best);
+    if (recordTime != null && bestTime != null && recordTime !== bestTime) {
+      return recordTime > bestTime ? record : best;
+    }
+    if (recordTime != null && bestTime == null) return record;
+    return best;
+  }, null);
+}
+
+/** Download experimental PDB coordinates through an injected fetch implementation. */
+export async function downloadStructure({ pdbId, dest, fetchImpl } = {}) {
+  if (typeof fetchImpl !== 'function') throw new Error('fetchImpl is required');
+  const normalizedId = String(pdbId ?? '').trim().toUpperCase();
+  if (!normalizedId) throw new Error('pdbId is required');
+  if (!dest) throw new Error('dest is required');
+
+  const response = requireOk(
+    await fetchImpl(`https://files.rcsb.org/download/${normalizedId}.pdb`),
+    'RCSB structure download',
+  );
+  const text = await response.text();
+  await writeFile(dest, text);
+  return { pdbId: normalizedId, dest, bytes: Buffer.byteLength(text) };
+}
+
+/** Return AlphaFold metadata when RCSB has no entries; do not predict locally. */
+export async function fallbackAlphafold({ uniprotId, fetchImpl } = {}) {
+  const accession = String(uniprotId ?? '').trim();
+  if (!accession) throw new Error('uniprotId is required');
+
+  const pdbId = `AF-${accession}-F1`;
+  const structureDownloadUrl = `https://alphafold.ebi.ac.uk/files/${pdbId}-model_v4.pdb`;
+  const record = {
+    source: 'alphafold',
+    pdb_id: pdbId,
+    uniprot_id: uniprotId,
+    structure_download_url: structureDownloadUrl,
+    method: 'AlphaFold prediction',
+    resolution: null,
+    has_ligand: false,
+  };
+
+  if (typeof fetchImpl === 'function') {
+    let response = await fetchImpl(structureDownloadUrl, { method: 'HEAD' });
+    if (response?.status === 405) {
+      response = await fetchImpl(structureDownloadUrl, { method: 'GET' });
+    }
+    requireOk(response, 'AlphaFold structure');
+  }
+
+  return record;
 }
 
 /** Run the complete Y-axis integration from a fixture or a bounded live retrieval. */

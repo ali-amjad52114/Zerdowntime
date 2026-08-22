@@ -3,6 +3,8 @@
 !.env.example
 node_modules/
 artifacts/
+data/structures/
+data/p2rank/
 tmp/
 observability/signoz/pours/
 observability/signoz/casting.yaml.lock
