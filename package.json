@@ -4,6 +4,12 @@
   "private": true,
   "description": "Integration-first scaffold for the Zero Downtime Hackathon.",
   "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test",
+    "signoz:up": "node scripts/signoz-stack.mjs up",
+    "signoz:down": "node scripts/signoz-stack.mjs down",
+    "signoz:verify": "node scripts/signoz-verify.mjs",
+    "telemetry:smoke": "node scripts/telemetry-smoke.mjs",
     "brightdata:version": "bdata --version",
     "brightdata:create": "bdata scraper create https://news.ycombinator.com \"Extract the current top stories as structured records with title, url, points, author, and comment_count\"",
     "brightdata:run": "node scripts/brightdata-run.mjs",
@@ -11,6 +17,16 @@
   },
   "devDependencies": {
     "@brightdata/cli": "latest"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/api-logs": "^0.221.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.221.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.221.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
+    "@opentelemetry/resources": "^2.10.0",
+    "@opentelemetry/sdk-logs": "^0.221.0",
+    "@opentelemetry/sdk-metrics": "^2.10.0",
+    "@opentelemetry/sdk-trace-base": "^2.10.0"
   }
 }
-
