@@ -9,6 +9,7 @@
     "signoz:up": "node scripts/signoz-stack.mjs up",
     "signoz:down": "node scripts/signoz-stack.mjs down",
     "signoz:verify": "node scripts/signoz-verify.mjs",
+    "signoz:mcp:smoke": "node scripts/signoz-mcp-smoke.mjs",
     "telemetry:smoke": "node scripts/telemetry-smoke.mjs",
     "brightdata:version": "bdata --version",
     "brightdata:create": "bdata scraper create https://news.ycombinator.com \"Extract the current top stories as structured records with title, url, points, author, and comment_count\"",
