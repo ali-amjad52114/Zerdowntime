@@ -12,6 +12,7 @@ import {
 } from './downstream.mjs';
 import { rollupAllDownstream } from './downstream-status.mjs';
 import { factoryLine } from './factory-line.mjs';
+import { buildVirtualCellSimulation } from './virtual-cell.mjs';
 
 /**
  * The one-page answer view.
@@ -380,6 +381,20 @@ ${result.youAreHere ? caption(`You are here: ${result.youAreHere}, by this run's
   });
 }
 
+function virtualCellPanel({ x, identity, rollup }) {
+  const result = buildVirtualCellSimulation({ x, identity });
+  const body = `${kindTag(result.kind)}
+<p class="note">${escapeHtml(result.scope ?? '')}</p>
+${bars3d(result.cells, { ariaLabel: 'Virtual cell simulated perturbation by modality and cellular node', xCategories: result.xCategories, yCategories: result.yCategories, xLabel: result.xLabel, yLabel: result.yLabel, zLabel: result.zLabel, topColorVar: 'var(--struct)' })}
+${result.message ? caption(result.message) : ''}
+${result.notSimulated?.length ? caption(`Not simulated, no documented AATD mechanism mapping: ${result.notSimulated.join(', ')}.`) : ''}
+${result.polymerisingVariantNote ? caption(result.polymerisingVariantNote, { flagged: !result.polymerisingVariantAnnotated }) : ''}`;
+  return panel({
+    number: '11', title: 'Virtual cell — simulated perturbation', source: 'Derived from X and Y.target_identity', stage: rollup, body,
+    evidence: basisNote('A documented mechanism-class simulation over four cellular nodes (src/mend/virtual-cell.mjs), not a trained predictive model.', rollup.dependsOn),
+  });
+}
+
 function downstreamSection(rollup) {
   const rows = Object.values(rollup).map((entry) => `<tr class="t-${escapeHtml(entry.status)}">
 <td>${escapeHtml(entry.label)}</td>
@@ -390,7 +405,7 @@ function downstreamSection(rollup) {
 
   return `<section class="trace">
 <div class="tracehead"><h2>Derived / downstream</h2></div>
-<p class="sub">Five views built from what the five stages above already produced — not a sixth stage the factory validates, a UI-level read of the same run.</p>
+<p class="sub">Views built from what the five stages above already produced — not a further stage the factory validates, a UI-level read of the same run.</p>
 <div class="tablewrap"><table>
 <thead><tr><th>Section</th><th>Status</th><th>Reads</th><th>Reported</th></tr></thead>
 <tbody>${rows}</tbody>
@@ -410,6 +425,9 @@ const STYLES = `
 --vseq-backbone:var(--rule-2);--vseq-variant:#A33C1E;--vseq-domain:#2E4EA8;--vseq-signal:#8A5300;
 --vres-em:#2E4EA8;--vres-xray:#8A5300;--vres-other:#7C877E;--vres-line:#A33C1E;
 --bars3d-side-l:#B7C3EA;--bars3d-side-r:#8DA0DD;
+--bars3d-ok-side-l:#9FD3BB;--bars3d-ok-side-r:#6FB897;
+--bars3d-risk-side-l:#E3AD9B;--bars3d-risk-side-r:#CC7D62;
+--bars3d-neutral-side-l:#C7CCC4;--bars3d-neutral-side-r:#A9B0A5;
 --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
 --body:"Inter Tight",system-ui,-apple-system,sans-serif;
 }
@@ -422,6 +440,9 @@ const STYLES = `
 --vseq-variant:#E08A6A;--vseq-domain:#8FA9E8;--vseq-signal:#D9A24E;
 --vres-em:#8FA9E8;--vres-xray:#D9A24E;--vres-other:#9AA79F;--vres-line:#E08A6A;
 --bars3d-side-l:#3A4A78;--bars3d-side-r:#2A3860;
+--bars3d-ok-side-l:#2E4A3C;--bars3d-ok-side-r:#1E3830;
+--bars3d-risk-side-l:#4A3226;--bars3d-risk-side-r:#3A241A;
+--bars3d-neutral-side-l:#3A423C;--bars3d-neutral-side-r:#2C332E;
 }}
 *{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);line-height:1.5}
@@ -570,6 +591,7 @@ export function renderTargetView(run) {
     generalizationPanel({ x, geography, y, identity, orphan, rollup: downstreamRollup.insight_generalization }),
     revenuePanel({ x, orphan, disease: DISEASE, rollup: downstreamRollup.revenue_forecast }),
     resourcingPanel({ x, rollup: downstreamRollup.resourcing }),
+    virtualCellPanel({ x, identity, rollup: downstreamRollup.virtual_cell_simulation }),
   ].join('');
 
   return page({
@@ -577,13 +599,13 @@ export function renderTargetView(run) {
     content: `${header(trace)}
 <section class="trace">
 <div class="tracehead"><h2>Factory line</h2></div>
-<p class="sub">Disease name in, five stations, five derived products — a break in any station is visible all the way through.</p>
+<p class="sub">Disease name in, five stations, six derived products — a break in any station is visible all the way through.</p>
 ${factoryLine(trace, downstreamRollup)}
 </section>
 ${traceSection(trace)}
 <section class="panels">${panels}</section>
 ${downstreamSection(downstreamRollup)}
 <section class="panels panels-downstream">${downstreamPanels}</section>
-<footer>Five panels over three axes: X — pipeline activity, Y — structural readiness, Z — IP activity and orphan exclusivity. Five derived sections below read the same five panels; a computed value is a formula over this run's own data, an illustrative value is a disclosed planning assumption, and neither is a forecast of actual performance. Curated tables carry a cited basis and are not live sources. Designation is not approval, exclusivity accrues on approval, and none of this is legal, regulatory or investment advice.</footer>`,
+<footer>Five panels over three axes: X — pipeline activity, Y — structural readiness, Z — IP activity and orphan exclusivity. The derived sections below read the same five panels; a computed value is a formula over this run's own data, an illustrative value is a disclosed planning assumption, and neither is a forecast of actual performance or a trained predictive model. Curated tables carry a cited basis and are not live sources. Designation is not approval, exclusivity accrues on approval, and none of this is legal, regulatory, investment or clinical advice.</footer>`,
   });
 }

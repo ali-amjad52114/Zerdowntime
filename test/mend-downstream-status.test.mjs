@@ -28,8 +28,9 @@ test('a degraded dependency degrades only the sections that actually depend on i
     : stage(id))));
   const rollup = rollupAllDownstream(degradedX);
 
-  // Depends on X: product_positioning, revenue_forecast, resourcing, insight_generalization.
-  for (const key of ['product_positioning', 'revenue_forecast', 'resourcing', 'insight_generalization']) {
+  // Depends on X: product_positioning, revenue_forecast, resourcing, insight_generalization,
+  // virtual_cell_simulation.
+  for (const key of ['product_positioning', 'revenue_forecast', 'resourcing', 'insight_generalization', 'virtual_cell_simulation']) {
     assert.equal(rollup[key].status, 'degraded', `${key} should degrade when X degrades`);
     assert.match(rollup[key].note, /X/);
     assert.deepEqual(rollup[key].issues, ['X returned no evidence records']);
@@ -53,6 +54,7 @@ test('a failed dependency with no fallback data blocks the section — chart rep
   // Unaffected sections stay released.
   assert.equal(rollup.product_positioning.status, 'released');
   assert.equal(rollup.resourcing.status, 'released');
+  assert.equal(rollup.virtual_cell_simulation.status, 'released', 'depends on Y.target_identity, not Z.orphan_exclusivity');
 });
 
 test('a section with two dependencies where only one is degraded reads degraded, never upgraded to blocked', () => {

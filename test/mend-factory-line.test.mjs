@@ -22,10 +22,10 @@ test('a healthy run draws all five core nodes, the input node, and every downstr
   for (const label of ['Input: disease name', 'Target', 'Cryo-EM &amp; mass', 'Subcellular location', 'Market &amp; CMC', 'Orphan status']) {
     assert.match(markup, new RegExp(`>${label}<`), `missing core node: ${label}`);
   }
-  for (const label of ['Positioning', 'Go-to-market', 'Generalization', 'Revenue model', 'Resourcing']) {
+  for (const label of ['Positioning', 'Go-to-market', 'Generalization', 'Revenue model', 'Resourcing', 'Virtual cell']) {
     assert.match(markup, new RegExp(`>${label}<`), `missing downstream node: ${label}`);
   }
-  assert.equal((markup.match(/<rect/g) || []).length, 11, 'input + 5 core + 5 downstream = 11 boxes');
+  assert.equal((markup.match(/<rect/g) || []).length, 12, 'input + 5 core + 6 downstream = 12 boxes');
 });
 
 test('every node and edge carries a title, and colours are themed, never hard-coded', () => {

@@ -29,6 +29,7 @@ const DOWNSTREAM_SHORT_LABEL = Object.freeze({
   insight_generalization: 'Generalization',
   revenue_forecast: 'Revenue model',
   resourcing: 'Resourcing',
+  virtual_cell_simulation: 'Virtual cell',
 });
 
 const STATUS_COLOR = Object.freeze({ released: 'var(--ok)', degraded: 'var(--warn)', blocked: 'var(--risk)', failed: 'var(--risk)' });

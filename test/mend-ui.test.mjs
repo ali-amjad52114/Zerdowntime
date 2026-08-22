@@ -30,14 +30,14 @@ test('the view presents five panels mapped onto the three existing axes', async 
   assert.doesNotMatch(html, /W axis|fourth axis/);
 });
 
-test('five further sections are derived from the same five panels, not a sixth axis', async () => {
+test('six further sections are derived from the same five panels, not a sixth axis', async () => {
   const { healthy } = await runs();
   const html = renderTargetView(healthy);
   const downstream = html.slice(html.indexOf('Derived / downstream'));
-  for (const title of ['Product positioning', 'Go-to-market strategy', 'Insight generalization', 'Revenue — illustrative planning model', 'Resourcing']) {
+  for (const title of ['Product positioning', 'Go-to-market strategy', 'Insight generalization', 'Revenue — illustrative planning model', 'Resourcing', 'Virtual cell — simulated perturbation']) {
     assert.match(downstream, new RegExp(`<h3>${title}`), `missing downstream panel: ${title}`);
   }
-  assert.equal(downstream.match(/class="panel /g).length, 5);
+  assert.equal(downstream.match(/class="panel /g).length, 6);
   assert.match(html, /Factory line/);
   assert.doesNotMatch(html, /Gaucher|Fabry|Pompe/i);
 });
@@ -77,14 +77,25 @@ test('all four core visualisations render from real axis output', async () => {
   assert.equal(core.match(/<svg/g).length, 4);
 });
 
-test('the five downstream sections render their 3D charts from real and illustrative data alike', async () => {
+test('the six downstream sections render their 3D charts from real and illustrative data alike', async () => {
   const { healthy } = await runs();
   const html = renderTargetView(healthy);
   const downstream = html.slice(html.indexOf('Derived / downstream'));
   assert.match(downstream, /Product positioning by stage/i);
-  assert.equal((downstream.match(/class="viz3d"/g) || []).length, 5);
+  assert.equal((downstream.match(/class="viz3d"/g) || []).length, 6);
   assert.match(downstream, /class="tag computed"/);
   assert.match(downstream, /class="tag illustrative"/);
+});
+
+test('the virtual cell panel simulates only modalities this run actually reports, on a citable mechanism basis', async () => {
+  const { healthy } = await runs();
+  const html = renderTargetView(healthy);
+  const downstream = html.slice(html.indexOf('Derived / downstream'));
+  const start = downstream.indexOf('<h3>Virtual cell');
+  const panelHtml = downstream.slice(downstream.lastIndexOf('<article', start), downstream.indexOf('</article>', start) + 10);
+  assert.match(panelHtml, /not a trained predictive model/);
+  assert.match(panelHtml, /ER polymer burden|Secretion|Elastase inhibition|ER stress/);
+  assert.doesNotMatch(panelHtml, /Gaucher|Fabry|Pompe/i);
 });
 
 test('curated tables are labelled as curated on screen, not in the JSON only', async () => {
@@ -137,8 +148,9 @@ test('a degraded core stage visibly propagates into the downstream sections that
   const { degraded } = await runs();
   const html = renderTargetView(degraded);
   const downstream = html.slice(html.indexOf('Derived / downstream'));
-  // Product positioning, insight generalization, revenue and resourcing all read X.
-  assert.equal((downstream.match(/class="panel p-degraded"/g) || []).length, 4);
+  // Product positioning, insight generalization, revenue, resourcing and the virtual cell
+  // simulation all read X.
+  assert.equal((downstream.match(/class="panel p-degraded"/g) || []).length, 5);
   assert.match(downstream, /Gate reported: X returned no evidence records/);
   // Go-to-market reads X.site_geography and Z.orphan_exclusivity, neither of which degraded.
   const gtmStart = downstream.indexOf('<h3>Go-to-market strategy');

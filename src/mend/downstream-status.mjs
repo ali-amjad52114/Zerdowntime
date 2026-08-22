@@ -1,5 +1,5 @@
 /**
- * Break propagation for the five downstream/derived sections — a sibling of `run-trace.mjs`,
+ * Break propagation for the downstream/derived sections — a sibling of `run-trace.mjs`,
  * same discipline: this reads the run's own trace and computes nothing the factory did not
  * already decide about its own axes and sub-axes.
  *
@@ -24,6 +24,7 @@ export const DOWNSTREAM_LABELS = Object.freeze({
   insight_generalization: 'Insight generalization',
   revenue_forecast: 'Revenue — illustrative planning model',
   resourcing: 'Resourcing',
+  virtual_cell_simulation: 'Virtual cell — simulated perturbation',
 });
 
 /** Which exact stage ids each downstream section's formula actually reads. */
@@ -33,6 +34,9 @@ export const DOWNSTREAM_DEPENDENCIES = Object.freeze({
   insight_generalization: Object.freeze(['X', 'X.site_geography', 'Y', 'Y.target_identity', 'Z.orphan_exclusivity']),
   revenue_forecast: Object.freeze(['X', 'Z.orphan_exclusivity']),
   resourcing: Object.freeze(['X']),
+  // Reads which modalities the pipeline reports (X) and whether this run's own Y.target_identity
+  // data annotates a polymerising variant — see virtual-cell.mjs.
+  virtual_cell_simulation: Object.freeze(['X', 'Y.target_identity']),
 });
 
 function stageById(trace, id) {

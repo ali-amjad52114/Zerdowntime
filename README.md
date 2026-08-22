@@ -166,12 +166,12 @@ paediatric programme has been subject to sunset and reauthorisation.
 ## Factory line and derived / downstream sections
 
 Above the run trace, the factory line diagram (`src/mend/factory-line.mjs`) draws the page's
-literal shape: disease name in, five stations, five derived products. Its five station nodes
+literal shape: disease name in, five stations, six derived products. Its five station nodes
 are the same X / Y / Y.target_identity / X.site_geography / Z.orphan_exclusivity mapping the
 five panels above already use for their own status badge — one mapping, not two.
 
 Below the five panels, a second "Derived / downstream" section reads what those five panels
-already produced and builds five further views, each with a hand-drawn 3D chart
+already produced and builds six further views, each with a hand-drawn 3D chart
 (`src/mend/viz3d.mjs`: `scatter3d`, `bars3d`, `ribbon3d`, fixed 30° isometric projection, no
 chart library):
 
@@ -182,8 +182,9 @@ chart library):
 | Insight generalization | `bars3d` | All five panels' own signals, triangulated — never a claim about another disease |
 | Revenue — illustrative planning model | `ribbon3d` | X + Z.orphan_exclusivity, anchored on the cited cost and epidemiology tables |
 | Resourcing | `bars3d` | X pipeline stage and modality, against a headcount-by-phase pattern |
+| Virtual cell — simulated perturbation | `bars3d` | X (matched modalities) + Y.target_identity (annotated variants), a documented AATD mechanism model |
 
-Every number on these five sections is tagged **computed** (a formula over this run's own real
+Every number on these six sections is tagged **computed** (a formula over this run's own real
 axis output, no citation needed) or **illustrative** (`src/mend/illustrative-assumptions.mjs`
 — a disclosed planning constant, never presented as a fact, styled with its own token so it is
 never confused with a degraded stage). The revenue model's exclusivity cliff, when drawn, is a
@@ -192,11 +193,32 @@ never claimed as this model's own exclusivity date, since no designation exists 
 hypothetical new entrant.
 
 `src/mend/downstream-status.mjs` is what makes `--mode break-x` propagate visibly into these
-five sections: a dependency map names the exact stage id each section's formula actually reads
+six sections: a dependency map names the exact stage id each section's formula actually reads
 (a degraded parent axis does not automatically degrade its sub-axis, so this has to be exact,
 not "the axis it's roughly under"), and rolls that up to released / degraded / blocked — the
 same two-tier vocabulary `run-trace.mjs` already uses. A blocked section (no previous healthy
 snapshot to fall back to) replaces its chart with a caption instead of rendering from nothing.
+
+### Virtual cell — simulated perturbation
+
+`src/mend/virtual-cell.mjs` answers "if this run's pipeline hits the target with this modality,
+what happens inside the cell" — the "virtual cell" a trained model would predict, without a
+trained model, since building one is out of reach here. Instead it's a small, fully disclosed
+mechanistic simulation: a fixed set of four cellular nodes from AATD's textbook two-hit
+mechanism (Lomas DA et al., *Nature*, 1992; reviewed in Strnad, McElvaney, Lomas, *NEJM*, 2020)
+— ER polymer burden, secretion/circulating AAT, elastase inhibition capacity, ER stress — and a
+`CELL_EFFECTS` table giving each documented mechanism class's direction on each node, cited to
+the same class of AATD therapeutics literature the rest of this repo already draws on.
+
+Direction is the citable claim; magnitude (0–10) is an illustrative modeled scale, same
+discipline as everywhere else. A matched modality with no established AATD mechanism is
+reported as **not simulated**, never guessed. The chart colours each cell by whether its
+direction is the node's own stated beneficial direction (`ok`) or the opposite (`risk`) or the
+mechanism has no documented effect on that node (`neutral`) — `bars3d` cells can now carry a
+per-cell `tone` for exactly this. Only modalities this run's own pipeline actually reports get
+simulated, and the panel states plainly whether this run's own Y.target_identity data
+specifically annotates a polymerising variant, or the simulation is running on the cited
+textbook mechanism alone.
 
 ## SigNoz / OpenTelemetry
 
