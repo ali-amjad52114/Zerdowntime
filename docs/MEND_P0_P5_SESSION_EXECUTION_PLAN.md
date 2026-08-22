@@ -103,3 +103,14 @@ Release only after automated tests, live sponsor proof, browser acceptance, pers
 - No fixture is represented as live evidence.
 - No session self-certifies; S5 evaluates exact commit hashes.
 - Failed gates return work to the owning session.
+
+## Integrated execution status — 2026-08-22
+
+- P0 correctness: complete and merged.
+- P1 end-to-end integration: complete locally; cloud callbacks/telemetry remain gated by deployment configuration.
+- P2 usable workflow: the critical slice is complete (history, review tasks, findings/decision contracts, retry/healing control); broader pagination/filtering remains future scope.
+- P3 scientific usefulness: evidence-derived discovery, exact identity, structures, source-linked ChEMBL activities, patents, and candidate diligence are complete for the critical slice.
+- P4 reliable operation: persistence, restart recovery, idempotency, bounded retry, provenance, redaction, dashboards/alerts/runbooks, and sponsor artifacts are implemented.
+- P5 cloud proof and release: Bright Data PASS; Port PARTIAL; SigNoz PARTIAL; cloud deployment and final release remain blocked.
+
+The four delegated workstreams were merged back into the primary integration branch. The authoritative current result is `docs/gates/S5_GATE_REPORT_2026-08-22.md`.
