@@ -1,0 +1,16 @@
+{
+  "name": "zero-downtime-factory",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Integration-first scaffold for the Zero Downtime Hackathon.",
+  "scripts": {
+    "brightdata:version": "bdata --version",
+    "brightdata:create": "bdata scraper create https://news.ycombinator.com \"Extract the current top stories as structured records with title, url, points, author, and comment_count\"",
+    "brightdata:run": "node scripts/brightdata-run.mjs",
+    "brightdata:smoke": "node scripts/brightdata-smoke.mjs"
+  },
+  "devDependencies": {
+    "@brightdata/cli": "latest"
+  }
+}
+
