@@ -36,6 +36,27 @@ Bright Data rules.
 
 ## Mend X/Y/Z vertical slice
 
+The browser entry point is now disease-first. Open <http://localhost:3000/mend>,
+enter a disease, and Mend retrieves a bounded live Europe PMC corpus plus its
+Gene/Protein annotations. It deduplicates papers, preserves source links,
+discovers candidate targets, and ranks them using exact supporting and
+contradictory passages. A human must select candidates before the application
+runs target-specific X/Y/Z diligence against ClinicalTrials.gov, RCSB, and EPO.
+No target is fixed in the discovery request.
+
+The discovery APIs are:
+
+```text
+POST /mend/discovery/start
+POST /mend/discovery/select
+POST /mend/discovery/handoff
+GET  /mend/discovery
+```
+
+The original fixed SERPINA1 lifecycle remains available at `POST /mend/runs`
+as a deterministic adapter-break/repair regression demonstration; it is no
+longer the product entry point.
+
 Run the deterministic factory lifecycle:
 
 ```sh
@@ -57,6 +78,23 @@ its evidence. X uses a versioned Bright Data-shaped page snapshot, Y supports
 bounded live RCSB retrieval, and Z uses an injected patent-source boundary. The
 fixture lifecycle proves orchestration and repair; live X and Z acquisition are
 separate acceptance steps and must not be represented as completed by fixtures.
+
+### Evidence-to-action diligence workflow
+
+A healthy published Mend run can now create useful follow-up work instead of
+ending at an evidence dashboard:
+
+```sh
+curl -X POST http://localhost:3000/mend/diligence
+```
+
+The workflow derives bounded competitive, structural, and IP signals; proposes
+focused diligence; and creates three source-linked review tasks. Each task must
+record a reviewer and finding before the final human decision unlocks. The page
+at <http://localhost:3000/mend> exposes the same workflow interactively.
+
+The recommendation is decision support only. It is not a target-selection,
+clinical, investment, patent-validity, or freedom-to-operate conclusion.
 
 Run the structured Y and Z integrations against live public sources:
 

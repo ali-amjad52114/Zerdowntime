@@ -1,0 +1,53 @@
+{
+  "hitCount": 4,
+  "resultList": {
+    "result": [
+      {
+        "id": "40110001",
+        "source": "MED",
+        "pmid": "40110001",
+        "pmcid": "PMC12000001",
+        "doi": "10.1000/aatd.2025.001",
+        "title": "Therapeutic development in alpha-1 antitrypsin deficiency",
+        "abstractText": "A review of therapeutic approaches for alpha-1 antitrypsin deficiency.",
+        "authorList": { "author": [{ "fullName": "Ada Researcher" }, { "firstName": "Ben", "lastName": "Scientist" }] },
+        "pubYear": "2025",
+        "journalTitle": "Rare Disease Research",
+        "pubType": "review",
+        "citedByCount": 12,
+        "isOpenAccess": "Y"
+      },
+      {
+        "id": "40110001-DUPLICATE",
+        "source": "MED",
+        "pmid": "40110001",
+        "doi": "10.1000/AATD.2025.001",
+        "title": "Therapeutic development in alpha-1 antitrypsin deficiency",
+        "abstractText": "Duplicate index representation of the same publication.",
+        "authorString": "Ada Researcher, Ben Scientist",
+        "pubYear": "2025"
+      },
+      {
+        "id": "39990002",
+        "source": "MED",
+        "pmid": "39990002",
+        "title": "Clinical burden and natural history of AATD",
+        "abstractText": "Longitudinal evidence describing clinical outcomes in AATD.",
+        "authorString": "Carla Clinician; Dan Investigator",
+        "journalInfo": { "yearOfPublication": 2024, "journal": { "title": "Pulmonary Medicine" } },
+        "pubType": "research article",
+        "isOpenAccess": "N"
+      },
+      {
+        "id": "39880003",
+        "source": "MED",
+        "pmid": "39880003",
+        "title": "Patient-centred outcomes in inherited antitrypsin deficiency",
+        "abstractText": "An observational study of patient-centred outcomes.",
+        "authorString": "Eve Analyst",
+        "firstPublicationDate": "2023-10-02"
+      }
+    ]
+  }
+}
+

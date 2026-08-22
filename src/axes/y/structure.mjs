@@ -79,6 +79,45 @@ export async function retrieveRcsbStructures({
   return payload;
 }
 
+/** Perform a bounded disease-agnostic RCSB full-text search for a selected target. */
+export async function retrieveRcsbStructuresByText({
+  target,
+  fetchImpl = globalThis.fetch,
+  maxEntries = 25,
+  searchEndpoint = DEFAULT_SEARCH_ENDPOINT,
+  dataEndpoint = DEFAULT_DATA_ENDPOINT,
+} = {}) {
+  const normalizedTarget = String(target ?? '').trim();
+  if (!normalizedTarget) throw new Error('target is required for RCSB full-text search');
+  if (typeof fetchImpl !== 'function') throw new Error('fetchImpl is required');
+  if (!Number.isInteger(maxEntries) || maxEntries < 1 || maxEntries > 100) {
+    throw new Error('maxEntries must be an integer between 1 and 100');
+  }
+  const searchResponse = requireOk(await fetchImpl(searchEndpoint, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      query: { type: 'terminal', service: 'full_text', parameters: { value: `\"${normalizedTarget}\"` } },
+      return_type: 'entry',
+      request_options: { paginate: { start: 0, rows: maxEntries } },
+    }),
+  }), 'RCSB full-text search');
+  const searchPayload = await searchResponse.json();
+  const ids = [...new Set((searchPayload.result_set ?? []).map((item) => String(item.identifier ?? '').toUpperCase()).filter(Boolean))]
+    .slice(0, maxEntries);
+  if (ids.length === 0) return { data: { entries: [] } };
+  const dataResponse = requireOk(await fetchImpl(dataEndpoint, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ query: ENTRY_QUERY, variables: { ids } }),
+  }), 'RCSB target data retrieval');
+  const payload = await dataResponse.json();
+  if (Array.isArray(payload.errors) && payload.errors.length > 0) {
+    throw new Error(`RCSB target data retrieval returned GraphQL errors: ${payload.errors[0]?.message ?? 'unknown error'}`);
+  }
+  return payload;
+}
+
 function firstNonEmpty(values) {
   return values.find((value) => typeof value === 'string' && value.trim())?.trim() ?? null;
 }
@@ -190,8 +229,10 @@ export function summarizeStructureRecords(records) {
 }
 
 /** Run the complete Y-axis integration from a fixture or a bounded live retrieval. */
-export async function runYAxis({ fixture, retrievedAt, subject, ...retrieveOptions } = {}) {
-  const payload = fixture ?? await retrieveRcsbStructures(retrieveOptions);
+export async function runYAxis({ fixture, retrievedAt, subject, target, ...retrieveOptions } = {}) {
+  const payload = fixture ?? (target
+    ? await retrieveRcsbStructuresByText({ target, ...retrieveOptions })
+    : await retrieveRcsbStructures(retrieveOptions));
   const records = normalizeRcsbStructures(payload, { retrievedAt, subject });
   return {
     axis: 'Y',
