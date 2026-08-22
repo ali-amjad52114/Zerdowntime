@@ -78,6 +78,22 @@ export function createTelemetry(options = {}) {
     validationFailures: meter.createCounter('mend_validation_failures_total', { description: 'Mend validation failures by axis' }),
     repairAttempts: meter.createCounter('mend_repair_attempts_total', { description: 'Mend X integration repair attempts' }),
     repairSuccess: meter.createCounter('mend_repair_success_total', { description: 'Successful Mend X integration repairs' }),
+
+    // The metric names mend/contracts/telemetry.md freezes. Dotted, because the SigNoz
+    // dashboard and the three alert rules key off these exact strings — renaming one is
+    // a breaking change to the dashboard, the alerts and the agent's prompt at once.
+    //
+    // Every one of them is a gauge except run duration, and field_null_rate is a metric
+    // rather than a span attribute on purpose: it is per-field, and putting twenty
+    // fields on every scrape span would explode the attribute set for no gain.
+    meridian: {
+      rows: meter.createGauge('mend.rows_returned', { description: 'Row elements matched, before validation' }),
+      conformance: meter.createGauge('mend.schema_conformance', { description: 'Records passing the record schema, 0-1' }),
+      fieldNullRate: meter.createGauge('mend.field_null_rate', { description: 'Null rate for one mapped field, 0-1' }),
+      unmappedFields: meter.createGauge('mend.unmapped_fields', { description: 'Observed attribute keys not declared in the schema' }),
+      runDuration: meter.createHistogram('mend.run_duration_ms', { unit: 'ms', description: 'Scrape-to-signals duration' }),
+      mttr: meter.createGauge('mend.mttr_seconds', { unit: 's', description: 'Detection to verified repair' }),
+    },
   };
 
   function contextFor(span) {

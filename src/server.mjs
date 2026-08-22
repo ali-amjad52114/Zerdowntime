@@ -7,8 +7,11 @@ import { createTelemetry } from './telemetry.mjs';
 import { runPipeline } from './pipeline.mjs';
 import { normalizeWebRecords } from './records.mjs';
 import { createDemoAxisRunners } from './mend/demo.mjs';
+import { createMeridianAxisRunners } from './mend/meridian-runners.mjs';
+import { runRepairLoop } from './mend/repair-loop.mjs';
+import { createScraperRegistry } from './mend/scraper-registry.mjs';
 import { healthySnapshot, runVerticalSlice } from './mend/vertical-slice.mjs';
-import { renderTargetView } from './mend/ui.mjs';
+import { renderRepairView, renderTargetView } from './mend/ui.mjs';
 
 const fallbackFixture = [{ title: 'Product-neutral smoke record', url: 'https://example.com/smoke', fixture: true }];
 loadLocalEnv();
@@ -37,6 +40,12 @@ async function readJson(request) {
 export function createApp({ telemetry = createTelemetry() } = {}) {
   let latestMendRun = null;
   let previousHealthy = {};
+  let latestRepairLoop = null;
+  // One registry per process, so a heal deployed through /mend/repair is the config the
+  // next Meridian scrape actually uses. A per-request registry would make every repair
+  // evaporate the moment it was approved.
+  const registry = createScraperRegistry();
+  let meridianRunners = null;
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
     const requestSpan = telemetry.startSpan(`api.${request.method.toLowerCase()} ${url.pathname}`, {
@@ -72,8 +81,11 @@ export function createApp({ telemetry = createTelemetry() } = {}) {
         const factoryVersion = body.factoryVersion ?? (mode === 'repaired' ? 'v2' : 'v1');
         requestSpan.setAttribute('run.id', runId);
         requestSpan.setAttribute('factory.version', factoryVersion);
+        const source = body.source ?? 'fixtures';
+        if (!['fixtures', 'meridian'].includes(source)) throw new Error('source must be fixtures or meridian');
+        if (source === 'meridian') meridianRunners ??= await createMeridianAxisRunners({ registry });
         latestMendRun = await runVerticalSlice({
-          axisRunners: await createDemoAxisRunners(),
+          axisRunners: source === 'meridian' ? meridianRunners : await createDemoAxisRunners(),
           mode,
           previousHealthy,
           factoryVersion,
@@ -83,6 +95,43 @@ export function createApp({ telemetry = createTelemetry() } = {}) {
         });
         if (latestMendRun.status === 'HEALTHY') previousHealthy = healthySnapshot(latestMendRun);
         sendJson(response, 200, latestMendRun);
+        return;
+      }
+      if (request.method === 'POST' && url.pathname === '/mend/repair') {
+        const body = await readJson(request);
+        // Detect -> ChangeRequest -> derive -> two gates -> approve -> deploy -> re-scrape.
+        // `approve: false` exercises the interlock: the repair is derived and turned down.
+        latestRepairLoop = await runRepairLoop({
+          registry,
+          origin: body.origin ?? process.env.MEND_MERIDIAN_URL ?? null,
+          healthyVersion: body.healthyVersion ?? 'v4',
+          brokenVersion: body.brokenVersion ?? 'v2',
+          approve: body.approve !== false,
+          reviewer: body.reviewer ?? 'human-reviewer',
+          telemetry,
+        });
+        requestSpan.setAttribute('mend.repair.status', latestRepairLoop.status);
+        sendJson(response, 200, {
+          status: latestRepairLoop.status,
+          publish: latestRepairLoop.publish,
+          steps: latestRepairLoop.steps,
+          changeRequest: latestRepairLoop.changeRequest,
+          softwareChange: latestRepairLoop.softwareChange,
+          scraper: latestRepairLoop.registry.toJSON(),
+        });
+        return;
+      }
+      if (request.method === 'GET' && url.pathname === '/mend/repair') {
+        if (!latestRepairLoop) {
+          sendJson(response, 404, { error: 'POST /mend/repair before opening the repair view' });
+          return;
+        }
+        response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        response.end(renderRepairView(latestRepairLoop));
+        return;
+      }
+      if (request.method === 'GET' && url.pathname === '/mend/scraper') {
+        sendJson(response, 200, registry.toJSON());
         return;
       }
       if (request.method === 'POST' && url.pathname === '/runs') {

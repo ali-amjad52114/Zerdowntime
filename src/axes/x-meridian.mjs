@@ -122,6 +122,9 @@ export function summarizeMeridian(records, signals) {
   const indications = new Set(records.map((record) => record.attributes.indication).filter(Boolean));
   return {
     programsFound: signals.rows_returned,
+    // Named `organizations` as well because the existing target view reads that key for
+    // the X card; for Meridian the collaborating organizations are the partners.
+    organizations: partners.size,
     partners: partners.size,
     indications: indications.size,
     schemaConformance: signals.schema_conformance,
