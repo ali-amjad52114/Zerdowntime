@@ -28,6 +28,7 @@
   "calculationProperties": {},
   "aggregationProperties": {},
   "relations": {
-    "project": { "title": "Project", "target": "zdProject", "required": true, "many": false }
+    "project": { "title": "Project", "target": "zdProject", "required": true, "many": false },
+    "scientific_brief": { "title": "Scientific brief", "target": "mendScientificBrief", "required": false, "many": false }
   }
 }

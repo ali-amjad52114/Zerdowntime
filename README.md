@@ -27,9 +27,61 @@ See `port/README.md` for the failure/retry/revision drill, Port account setup, a
 
 The validated JSON artifact is written to `artifacts/brightdata/latest.json` and is ignored by Git.
 
-See `docs/MEND_MVP_SPEC.md` for the agentic software-factory product contract,
-`SMOKE_TESTS.md` for sponsor acceptance criteria, and `CODEX.md` for reusable
+The active implementation target is `MEND_CRITICAL_SLICE_MVP_SPEC.md`: one
+SERPINA1/AATD target, three X/Y/Z integrations (pipeline, structural readiness,
+and IP activity), and one controlled X-axis failure proving the complete build,
+approval, deployment, repair, redeployment, and recovery loop. Broader product
+and sponsor specs are retained under `refecen/`. See `CODEX.md` for reusable
 Bright Data rules.
+
+## Mend X/Y/Z vertical slice
+
+Run the deterministic factory lifecycle:
+
+```sh
+npm run mend:demo
+```
+
+It executes `v1 healthy → X failed while Y/Z remain healthy → v2 recovered`
+using saved, credential-free fixtures. Start the API and one-page target view:
+
+```sh
+npm start
+curl -X POST http://localhost:3000/mend/runs -H "content-type: application/json" -d '{"mode":"normal","runId":"mend-v1-healthy"}'
+curl -X POST http://localhost:3000/mend/runs -H "content-type: application/json" -d '{"mode":"break-x","runId":"mend-v1-x-failed"}'
+curl -X POST http://localhost:3000/mend/runs -H "content-type: application/json" -d '{"mode":"repaired","runId":"mend-v2-recovered"}'
+```
+
+Then open <http://localhost:3000/mend>. Every displayed X/Y/Z result links to
+its evidence. X uses a versioned Bright Data-shaped page snapshot, Y supports
+bounded live RCSB retrieval, and Z uses an injected patent-source boundary. The
+fixture lifecycle proves orchestration and repair; live X and Z acquisition are
+separate acceptance steps and must not be represented as completed by fixtures.
+
+Run the structured Y and Z integrations against live public sources:
+
+```sh
+npm run mend:live:structured
+```
+
+Y uses the bounded RCSB API. Z uses the EPO Linked Open Data SPARQL endpoint for
+occasional, bounded IP-activity lookup and never reports freedom to operate.
+For live X acquisition, create a dedicated Beam pipeline collector and save the
+returned stable `c_*` identifier as `MEND_X_COLLECTOR_ID` in ignored `.env.local`:
+
+```sh
+npm run mend:x:create
+npm run mend:x:live
+```
+
+Export the three-run Mend lifecycle to the configured SigNoz OTLP endpoint:
+
+```sh
+npm run mend:telemetry:smoke
+```
+
+Search SigNoz for `mend-v1-healthy`, `mend-v1-x-failed`, and
+`mend-v2-recovered` to follow healthy → isolated X failure → recovery.
 
 ## SigNoz / OpenTelemetry
 

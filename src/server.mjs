@@ -6,6 +6,9 @@ import { loadLocalEnv } from '../scripts/env.mjs';
 import { createTelemetry } from './telemetry.mjs';
 import { runPipeline } from './pipeline.mjs';
 import { normalizeWebRecords } from './records.mjs';
+import { createDemoAxisRunners } from './mend/demo.mjs';
+import { healthySnapshot, runVerticalSlice } from './mend/vertical-slice.mjs';
+import { renderTargetView } from './mend/ui.mjs';
 
 const fallbackFixture = [{ title: 'Product-neutral smoke record', url: 'https://example.com/smoke', fixture: true }];
 loadLocalEnv();
@@ -32,6 +35,8 @@ async function readJson(request) {
 }
 
 export function createApp({ telemetry = createTelemetry() } = {}) {
+  let latestMendRun = null;
+  let previousHealthy = {};
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
     const requestSpan = telemetry.startSpan(`api.${request.method.toLowerCase()} ${url.pathname}`, {
@@ -40,6 +45,44 @@ export function createApp({ telemetry = createTelemetry() } = {}) {
     try {
       if (request.method === 'GET' && url.pathname === '/health') {
         sendJson(response, 200, { ok: true, service: telemetry.serviceName });
+        return;
+      }
+      if (request.method === 'GET' && url.pathname === '/mend/target') {
+        if (!latestMendRun) {
+          sendJson(response, 404, { error: 'run the Mend vertical slice first' });
+          return;
+        }
+        sendJson(response, 200, latestMendRun);
+        return;
+      }
+      if (request.method === 'GET' && url.pathname === '/mend') {
+        if (!latestMendRun) {
+          sendJson(response, 404, { error: 'POST /mend/runs before opening the target view' });
+          return;
+        }
+        response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        response.end(renderTargetView(latestMendRun));
+        return;
+      }
+      if (request.method === 'POST' && url.pathname === '/mend/runs') {
+        const body = await readJson(request);
+        const mode = body.mode ?? 'normal';
+        if (!['normal', 'break-x', 'repaired'].includes(mode)) throw new Error('mode must be normal, break-x, or repaired');
+        const runId = body.runId ?? randomUUID();
+        const factoryVersion = body.factoryVersion ?? (mode === 'repaired' ? 'v2' : 'v1');
+        requestSpan.setAttribute('run.id', runId);
+        requestSpan.setAttribute('factory.version', factoryVersion);
+        latestMendRun = await runVerticalSlice({
+          axisRunners: await createDemoAxisRunners(),
+          mode,
+          previousHealthy,
+          factoryVersion,
+          runId,
+          telemetry,
+          parentSpan: requestSpan,
+        });
+        if (latestMendRun.status === 'HEALTHY') previousHealthy = healthySnapshot(latestMendRun);
+        sendJson(response, 200, latestMendRun);
         return;
       }
       if (request.method === 'POST' && url.pathname === '/runs') {

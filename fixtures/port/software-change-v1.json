@@ -1,0 +1,22 @@
+{
+  "identifier": "serpina1-build-v1",
+  "title": "Build SERPINA1 X/Y/Z integrations",
+  "properties": {
+    "kind": "BUILD",
+    "factory_version": "v1",
+    "author": "mend-agent",
+    "git_ref": "refs/heads/codex/serpina1-xyz",
+    "git_diff_url": "https://github.com/REPLACE_WITH_GITHUB_ORG/REPLACE_WITH_GITHUB_REPO/compare/main...codex/serpina1-xyz",
+    "changed_files": ["src/axes/x-pipeline-adapter.mjs", "src/axes/y/structure.mjs", "src/axes/z-ip-activity.mjs"],
+    "test_status": "PASS",
+    "test_command": "npm test",
+    "test_evidence": { "suite": "repository", "result": "PASS", "artifact": "GitHub Actions run URL must be attached before approval" },
+    "status": "AWAITING_APPROVAL",
+    "audit": [{ "type": "approval_requested", "actor": "mend-agent" }]
+  },
+  "relations": {
+    "brief": "serpina1-aatd-xyz",
+    "workflow_run": "REPLACE_WITH_WORKFLOW_RUN_ID",
+    "integrations": ["serpina1-x-pipeline", "serpina1-y-structure", "serpina1-z-ip"]
+  }
+}

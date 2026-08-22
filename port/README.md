@@ -1,16 +1,32 @@
 # Port integration
 
-This directory is the Git-controlled source of truth for a product-idea-neutral Port catalog and delivery path. The current web-data fixture is represented only by a generic structured-data service contract; changing the product or provider does not change the orchestration model.
+This directory is the Git-controlled source of truth for the Port factory control plane. The original product-neutral delivery workflow remains intact, and Mend's constrained SERPINA1/AATD X/Y/Z catalog is layered on top of it.
 
 ## Repository artifacts
 
-- `blueprints/` models project context, replaceable services, workflow runs, and decisions.
+- `blueprints/` models project context, replaceable services, workflow runs, decisions, the scientific brief, X/Y/Z integrations, generated software changes, and repair requests.
 - `entities/` seeds goals, constraints, technical choices, risks, and service boundaries.
 - `actions/submit-change.json` starts plan/build/test from a brief.
 - `actions/release-change.json` is a separate day-2 action with `requiredApproval: true`. A Port decline leaves the backend uninvoked.
 - `actions/retry-run.json` reruns the failed stage with the same workflow/correlation identifier.
 - `.github/workflows/port-delivery.yml` is the backend shared by all three actions.
 - `scripts/lib/port-workflow.mjs` implements the local state machine and audit trail.
+
+## Mend X/Y/Z control-plane model
+
+The active scientific brief is `mendScientificBrief/serpina1-aatd-xyz`. Its three `mendAxisIntegration` entities make X, Y, and Z independently visible, including their source, versioned adapter path, factory version, health state, last record count, and evidence requirement. X explicitly records Bright Data as its acquisition provider.
+
+`mendSoftwareChange` is the human review packet. It requires the proposed factory version, author, Git ref, changed files, test command, structured test evidence, affected integrations, workflow run, and an audit list. A change may be approved through the existing **Approve and release change** action only after the workflow reaches `awaiting_approval`; rejection never invokes the release backend.
+
+`mendRepairRequest` records the isolated X failure without overwriting the healthy dataset. It requires the failed run, previous and current counts, quarantine state, last-known-good state, validation reason, and the repair artifacts the coding agent must produce. The eventual repair change and human `zdDecision` link back to it, preserving the failure-to-recovery audit chain.
+
+Validated payload examples are deliberately not seeded because their workflow IDs, Git evidence, reviewer, and timestamps must come from a real run:
+
+- `fixtures/port/software-change-v1.json`
+- `fixtures/port/x-repair-request.json`
+- `fixtures/port/repair-approval.json`
+
+Replace every `REPLACE_WITH_*` value with evidence from the actual GitHub/Port run before upserting an example. Never mark `candidate-v1` as deployed or an integration as healthy merely because its repository tests pass; those state transitions require the live approval and runtime evidence described in the critical-slice spec.
 
 The repeatable state path is:
 
@@ -69,8 +85,9 @@ Compare the two `plan_hash` values in command output and inspect the `plan_revis
 1. Install Port's GitHub integration for the repository and permit it to dispatch `.github/workflows/port-delivery.yml`.
 2. In ignored `.env.local`, set `PORT_CLIENT_ID`, `PORT_CLIENT_SECRET`, `PORT_GITHUB_ORG`, and `PORT_GITHUB_REPO`. Use `PORT_API_URL=https://api.us.port.io` for a US-region account; the default is the EU API.
 3. Add `PORT_CLIENT_ID` and `PORT_CLIENT_SECRET` as GitHub Actions repository secrets. Do not put their values in Port JSON, workflow inputs, logs, or commits.
-4. Run `npm run port:validate`, then `npm run port:sync -- --live`. The sync creates or replaces the four blueprints, seed entities, and three actions. Re-running it is idempotent.
+4. Run `npm run port:validate`, then `npm run port:sync -- --live`. The sync creates or replaces the eight blueprints, seed entities, and three generic workflow actions. Re-running it is idempotent. Validated example payloads are not automatically synced.
 5. Restrict action execution/approval RBAC in Port to the intended teams or users. Assign approvers to `zd_release_change`; its repository definition enforces manual approval and disables outbound approval notifications.
+6. After each real build or repair workflow, upsert the corresponding software-change, repair-request, and decision payloads using the action run ID for correlation. Attach the Git compare/commit URL and GitHub test artifact before requesting approval.
 
 If API sync is unavailable, create the blueprints in manifest order, then seed entities, then create the actions by pasting their JSON in Port. Replace the two `REPLACE_WITH_GITHUB_*` values when using this manual route.
 

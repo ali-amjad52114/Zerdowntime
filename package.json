@@ -5,6 +5,12 @@
   "description": "Integration-first scaffold for the Zero Downtime Hackathon.",
   "scripts": {
     "start": "node src/server.mjs",
+    "mend:demo": "node scripts/mend-demo.mjs",
+    "mend:live:structured": "node scripts/mend-live-structured.mjs",
+    "mend:telemetry:smoke": "node scripts/mend-telemetry-smoke.mjs",
+    "mend:x:create": "node scripts/mend-x-create.mjs",
+    "mend:x:live": "node scripts/mend-x-live.mjs",
+    "mend:x:heal": "node scripts/mend-x-heal.mjs",
     "test": "node --test",
     "signoz:up": "node scripts/signoz-stack.mjs up",
     "signoz:down": "node scripts/signoz-stack.mjs down",

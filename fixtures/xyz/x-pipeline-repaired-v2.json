@@ -1,0 +1,15 @@
+{
+  "fixture": "synthetic changed page consumed by repaired factory-v2 adapter; not a live scientific source",
+  "source_url": "https://example.invalid/mend-fixtures/serpina1-aatd-pipeline",
+  "retrieved_at": "2026-08-22T15:20:00.000Z",
+  "programme_cards": [
+    { "sponsor": "AATD Therapeutics Collaborative", "program_name": "AAT-RNAi-01", "indication": "Alpha-1 Antitrypsin Deficiency", "mechanism": "SERPINA1 RNA silencing", "stage": "Phase 2", "status": "Active", "evidence_text": "AAT-RNAi-01 is listed as an active Phase 2 SERPINA1 RNA-silencing program for AATD." },
+    { "sponsor": "Hepatic Medicines Group", "program_name": "HMG-AT-02", "indication": "Alpha-1 Antitrypsin Deficiency", "mechanism": "Mutant AAT reduction", "stage": "Phase 1/2", "status": "Active", "evidence_text": "HMG-AT-02 is listed in Phase 1/2 for reduction of mutant alpha-1 antitrypsin." },
+    { "sponsor": "Northstar Rare Disease", "program_name": "NSR-SERP-11", "indication": "Alpha-1 Antitrypsin Deficiency", "mechanism": "SERPINA1 gene correction", "stage": "Phase 1", "status": "Recruiting", "evidence_text": "NSR-SERP-11 is listed as a recruiting Phase 1 SERPINA1 gene-correction program." },
+    { "sponsor": "AeroLung Bio", "program_name": "ALB-AAT-7", "indication": "Alpha-1 Antitrypsin Deficiency", "mechanism": "Neutrophil elastase inhibition", "stage": "Phase 2", "status": "Active", "evidence_text": "ALB-AAT-7 is listed as an active Phase 2 neutrophil-elastase inhibitor for AATD." },
+    { "sponsor": "Proteostasis Labs", "program_name": "PL-A1AT-4", "indication": "Alpha-1 Antitrypsin Deficiency", "mechanism": "AAT folding corrector", "stage": "Preclinical", "status": "Active", "evidence_text": "PL-A1AT-4 is listed as an active preclinical folding-corrector program." },
+    { "sponsor": "Hepatic Medicines Group", "program_name": "HMG-AT-03", "indication": "Alpha-1 Antitrypsin Deficiency", "mechanism": "SERPINA1 base editing", "stage": "Preclinical", "status": "Active", "evidence_text": "HMG-AT-03 is listed as an active preclinical SERPINA1 base-editing program." },
+    { "sponsor": "Northstar Rare Disease", "program_name": "NSR-AAT-RX", "indication": "Alpha-1 Antitrypsin Deficiency", "mechanism": "AAT augmentation", "stage": "Phase 1", "status": "Active", "evidence_text": "NSR-AAT-RX is listed as an active Phase 1 AAT augmentation program." },
+    { "sponsor": "AATD Therapeutics Collaborative", "program_name": "GRI-SERPINA1", "indication": "Alpha-1 Antitrypsin Deficiency", "mechanism": "SERPINA1 prime editing", "stage": "Discovery", "status": "Active", "evidence_text": "GRI-SERPINA1 is listed as an active discovery-stage SERPINA1 prime-editing program." }
+  ]
+}

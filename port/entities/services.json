@@ -14,13 +14,13 @@
   {
     "identifier": "application-pipeline",
     "title": "Application or Pipeline",
-    "properties": { "kind": "application", "contract": "Consumes normalized records without depending on the fixture source.", "status": "scaffolded", "documentation": "SMOKE_TESTS.md" },
+    "properties": { "kind": "application", "contract": "Consumes normalized records without depending on the fixture source.", "status": "scaffolded", "documentation": "refecen/SMOKE_TESTS.md" },
     "relations": { "project": "zero-downtime-factory" }
   },
   {
     "identifier": "telemetry-backend",
     "title": "Telemetry Backend",
-    "properties": { "kind": "observability", "contract": "Receives correlated workflow traces, logs, and metrics through OpenTelemetry.", "status": "scaffolded", "documentation": "SMOKE_TESTS.md" },
+    "properties": { "kind": "observability", "contract": "Receives correlated workflow traces, logs, and metrics through OpenTelemetry.", "status": "scaffolded", "documentation": "refecen/SMOKE_TESTS.md" },
     "relations": { "project": "zero-downtime-factory" }
   }
 ]

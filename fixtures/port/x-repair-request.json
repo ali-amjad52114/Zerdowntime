@@ -1,0 +1,23 @@
+{
+  "identifier": "serpina1-x-repair-v2",
+  "title": "Repair X pipeline record-count collapse",
+  "properties": {
+    "axis": "X",
+    "source_name": "DNDi pipeline fixture",
+    "factory_version": "v1",
+    "failed_run_id": "REPLACE_WITH_FAILED_RUN_ID",
+    "previous_healthy_count": 8,
+    "current_count": 0,
+    "validation_reason": "Suspicious X-axis record-count collapse from 8 to 0",
+    "failed_dataset_quarantined": true,
+    "previous_data_remains_active": true,
+    "required_artifacts": ["integration repair", "regression test", "verification report", "Git diff"],
+    "status": "REPAIR_REQUIRED",
+    "audit": [{ "type": "repair_requested", "source": "validation" }]
+  },
+  "relations": {
+    "brief": "serpina1-aatd-xyz",
+    "integration": "serpina1-x-pipeline",
+    "failed_run": "REPLACE_WITH_FAILED_RUN_ID"
+  }
+}

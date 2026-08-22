@@ -68,6 +68,16 @@ export function createTelemetry(options = {}) {
     duration: meter.createHistogram('zero_downtime_run_duration_ms', { unit: 'ms', description: 'End-to-end workflow duration' }),
     stages: meter.createCounter('zero_downtime_stage_executions_total', { description: 'Pipeline stage executions' }),
     failures: meter.createCounter('zero_downtime_stage_failures_total', { description: 'Controlled and real pipeline failures' }),
+    factoryRuns: meter.createCounter('mend_factory_runs_total', { description: 'Completed Mend X/Y/Z factory runs' }),
+    factoryDuration: meter.createHistogram('mend_factory_run_duration_ms', { unit: 'ms', description: 'Mend X/Y/Z runtime duration' }),
+    axisRecords: {
+      X: meter.createHistogram('mend_x_records', { description: 'X pipeline records produced per run' }),
+      Y: meter.createHistogram('mend_y_records', { description: 'Y structure records produced per run' }),
+      Z: meter.createHistogram('mend_z_records', { description: 'Z IP activity records produced per run' }),
+    },
+    validationFailures: meter.createCounter('mend_validation_failures_total', { description: 'Mend validation failures by axis' }),
+    repairAttempts: meter.createCounter('mend_repair_attempts_total', { description: 'Mend X integration repair attempts' }),
+    repairSuccess: meter.createCounter('mend_repair_success_total', { description: 'Successful Mend X integration repairs' }),
   };
 
   function contextFor(span) {

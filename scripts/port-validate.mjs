@@ -35,6 +35,16 @@ function validateEntity(entity, blueprint, source) {
     if (!property) errors.push(`${source}:${entity.identifier} has undefined property '${name}'`);
     else if (property.type === "array" && !Array.isArray(value)) errors.push(`${source}:${entity.identifier}.${name} must be an array`);
     else if (property.type !== "array" && property.type !== "object" && typeof value !== property.type) errors.push(`${source}:${entity.identifier}.${name} must be ${property.type}`);
+    else if (property.enum && !property.enum.includes(value)) errors.push(`${source}:${entity.identifier}.${name} is outside its enum`);
+    else if (property.type === "array" && property.items?.enum && value.some((item) => !property.items.enum.includes(item))) errors.push(`${source}:${entity.identifier}.${name} contains a value outside its item enum`);
+  }
+  for (const [name, relation] of Object.entries(blueprint.relations)) {
+    const value = entity.relations?.[name];
+    if (relation.required && (value === undefined || value === null || value === "" || (relation.many && (!Array.isArray(value) || value.length === 0)))) {
+      errors.push(`${source}:${entity.identifier} omits required relation '${name}'`);
+    }
+    if (value !== undefined && relation.many && !Array.isArray(value)) errors.push(`${source}:${entity.identifier}.${name} must be an array relation`);
+    if (value !== undefined && !relation.many && typeof value !== "string") errors.push(`${source}:${entity.identifier}.${name} must be a string relation`);
   }
   for (const name of Object.keys(entity.relations ?? {})) if (!blueprint.relations[name]) errors.push(`${source}:${entity.identifier} has undefined relation '${name}'`);
 }
@@ -44,6 +54,15 @@ for (const entry of manifest.entities ?? []) {
   if (!existsSync(path)) { errors.push(`Missing entity file: ${path}`); continue; }
   const blueprint = blueprints.get(entry.blueprint);
   if (!blueprint) { errors.push(`Entity file targets unknown blueprint '${entry.blueprint}'`); continue; }
+  const data = readJson(path);
+  for (const entity of Array.isArray(data) ? data : [data]) validateEntity(entity, blueprint, entry.file);
+}
+
+for (const entry of manifest.examples ?? []) {
+  const path = join(root, entry.file);
+  if (!existsSync(path)) { errors.push(`Missing example file: ${path}`); continue; }
+  const blueprint = blueprints.get(entry.blueprint);
+  if (!blueprint) { errors.push(`Example file targets unknown blueprint '${entry.blueprint}'`); continue; }
   const data = readJson(path);
   for (const entity of Array.isArray(data) ? data : [data]) validateEntity(entity, blueprint, entry.file);
 }
@@ -85,4 +104,4 @@ if (errors.length) {
   console.error(errors.map((error) => `- ${error}`).join("\n"));
   process.exit(1);
 }
-console.log(`Port validation passed: ${blueprints.size} blueprints, ${manifest.entities.length} entity files, ${actionIds.size} actions.`);
+console.log(`Port validation passed: ${blueprints.size} blueprints, ${manifest.entities.length} seed entity files, ${(manifest.examples ?? []).length} validated examples, ${actionIds.size} actions.`);

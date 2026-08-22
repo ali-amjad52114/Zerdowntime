@@ -1,10 +1,10 @@
 # Mend MVP Product and Engineering Specification
 
-**Status:** Proposed v0.2
+**Status:** Proposed v0.3
 
 **Product:** Mend — Agentic Software Factory for Self-Healing Biotech Intelligence
 
-**Primary objective:** Prove one repeatable, observable, repairable, and human-controlled factory that converts an intelligence brief into versioned software, deploys that software, and uses it to produce trustworthy biotech intelligence.
+**Primary objective:** Prove one repeatable, observable, repairable, and human-controlled factory that converts an intelligence brief into versioned software, deploys that software, and uses it to produce trustworthy, evidence-grounded biotech intelligence.
 
 ## 1. Product contract
 
@@ -22,7 +22,8 @@ Brief → Assemble Context → Plan → Generate/Modify Software → Test
     → Review Change → Human Approve/Reject → Deploy Factory Version
 
 Operational intelligence loop:
-Discover → Scrape → Normalize → Validate → Enrich → Compare
+Discover Sources → Scrape → Normalize → Explore Candidates
+    → Resolve Aliases → Validate Evidence → Enrich → Compare
     → Detect Failure → Block Release → Diagnose → Generate Repair
     → Test Repair → Human Approve/Reject → Deploy Repair → Re-scrape
     → Re-validate → Human Approve/Reject Dataset → Release
@@ -49,6 +50,29 @@ The minimum manufactured software unit includes:
 - A Git commit or pull request linked to the originating brief, run, and evidence.
 - A deployable factory version that can be rolled forward without mutating a prior release.
 
+### 1.2 Problem and solution
+
+#### Problem
+
+Biotech competitive intelligence is fragmented across changing websites,
+registries, publications, company announcements, and documents. The same drug,
+company, or indication may appear under multiple names; important attributes
+may be missing or contradictory; and a source-layout change can silently turn
+a healthy extraction into an incomplete dataset. A general research agent may
+find plausible candidates, but plausibility alone is not sufficient for a
+releasable scientific claim.
+
+#### Solution
+
+Mend manufactures and operates the software needed to answer an intelligence
+brief. It generates or modifies source adapters, research prompts, mappings,
+validation policies, tests, workflows, and telemetry; verifies the change;
+requires human approval; and deploys an immutable factory version. At runtime,
+a high-recall Explorer discovers candidate programs, a separate evidence-based
+Validator checks them, and Port holds consequential software and dataset
+decisions for humans. Bright Data supplies current web evidence and SigNoz
+makes the complete build, research, validation, and repair path observable.
+
 ## 2. MVP scope
 
 ### Included
@@ -67,6 +91,10 @@ The minimum manufactured software unit includes:
 - Failure-to-repair generation that produces a bounded software patch rather
   than silently changing a live scraper or pipeline.
 - Canonical normalization, evidence preservation, validation, and historical comparison.
+- Bounded competitive-landscape discovery using an Explorer, alias resolution,
+  structured research summaries, and an independent evidence Validator.
+- Versioned evaluation datasets and precision/recall/F1 regression gates for
+  research-agent, prompt, mapping, and validator changes.
 - Structured enrichment from Open Targets, ChEMBL, and PubMed only.
 - Port entities, relationships, run control, remediation, approval, and audit history.
 - OpenTelemetry traces, metrics, and logs in SigNoz.
@@ -82,6 +110,10 @@ The minimum manufactured software unit includes:
 - Autonomous release after repair.
 - A second operational dashboard that duplicates Port or SigNoz.
 - Production-scale crawling, billing, multi-tenancy, or complex identity management.
+- Unbounded autonomous web research, unrestricted search fan-out, or a claim
+  that a language-model judgment is ground truth.
+- Reproducing the paper's private benchmark or presenting its reported scores
+  as Mend performance without an independent Mend evaluation.
 - Unreviewed autonomous code deployment or direct mutation of production software.
 
 ## 3. Users and outcomes
@@ -89,6 +121,7 @@ The minimum manufactured software unit includes:
 ### Intelligence analyst
 
 - Submits or changes an intelligence brief.
+- Reviews discovered competitor candidates, supporting evidence, aliases, and validator verdicts.
 - Reviews material drug-program changes with source evidence.
 - Approves or rejects repaired candidate releases.
 
@@ -102,6 +135,30 @@ The minimum manufactured software unit includes:
 
 - Can follow a single run across Bright Data, Port, SigNoz, and Mend using one `run.id`.
 - Can verify that bad data was blocked and the prior healthy release stayed active.
+
+### 3.1 Primary user flow
+
+1. An intelligence analyst submits a question such as, “Map active competitor
+   programs for indication X and monitor material changes.”
+2. Mend assembles repository context and manufactures any required adapter,
+   prompt, schema, mapping, validation, test, Port, or telemetry change.
+3. Automated tests and historical evaluation datasets measure correctness and
+   regressions. Port presents the exact software diff and evidence to a human.
+4. Approval deploys an immutable `factory.version`; rejection leaves the
+   currently active factory untouched.
+5. Bright Data retrieves approved web sources. The Explorer generates a broad
+   candidate set and compact structured summaries with source evidence.
+6. Alias resolution links equivalent indication, drug, and organization names
+   while preserving original source values and confidence.
+7. The Validator independently checks each candidate using explicit evidence
+   rules. Unsupported candidates are rejected with a reason; ambiguous cases
+   are routed to an analyst.
+8. Passing candidates are enriched, compared with the last healthy release,
+   and presented in Port as a versioned candidate dataset.
+9. The analyst approves or rejects the dataset. Only the exact approved
+   candidate becomes the new immutable release.
+10. SigNoz correlates the whole path. A source, evaluation, or validation
+    failure blocks release and can initiate a new governed software-repair loop.
 
 ## 4. System architecture
 
@@ -128,7 +185,10 @@ Immutable factory version deployed
 Bright Data scrape → source artifact                         │
        │                                                     │
        ▼                                                     │
-Normalize → Validate ──fail──→ quarantine → diagnosis        │
+Normalize → Explore candidates → Resolve aliases             │
+       │                                                     │
+       ▼                                                     │
+Validate schema + evidence ──fail──→ quarantine → diagnosis  │
        │ pass                                  │              │
        ▼                                       ▼              │
 Open Targets / ChEMBL / PubMed       agent-generated repair  │
@@ -147,6 +207,10 @@ OpenTelemetry wraps build and runtime stages → SigNoz
 - Source adapters know source-specific fields and selectors.
 - The factory core consumes only canonical records and source/run metadata.
 - Enrichment adapters return namespaced facts with citations; they do not mutate source claims.
+- The Explorer is optimized for bounded coverage; the Validator is a separate
+  decision layer optimized for evidence-backed precision.
+- Language-model judgments are advisory. Deterministic checks, cited source
+  evidence, evaluation results, and human decisions remain authoritative.
 - Port owns control state and consequential approval decisions.
 - Git owns versioned software history; every deployed factory version resolves
   to an immutable commit and verification record.
@@ -174,6 +238,8 @@ Other stable identifiers:
 - `record.id`: deterministic fingerprint of normalized organization, program, disease, and source identity fields.
 - `dataset.id`: immutable version identifier for one validated candidate or release.
 - `repair.id`: UUID for one repair attempt linked to the failed run and source.
+- `candidate.id`: deterministic or UUID identity for one discovered competitive candidate.
+- `claim.id`: deterministic identity for one versioned evidence-backed claim.
 
 `change.id` and `factory.version` must appear in Port, Git evidence, deployment
 manifests, and applicable OpenTelemetry spans so a reviewer can trace a dataset
@@ -219,6 +285,46 @@ back to the exact software that produced it.
 - Raw evidence is preserved verbatim within reasonable size limits.
 - Normalization may standardize whitespace, casing, URLs, and controlled vocabularies, but must preserve the original value in provenance when meaning could change.
 - Enrichment is namespaced and never silently overwrites scraped claims.
+
+### Competitive candidate record
+
+```json
+{
+  "candidate_id": "",
+  "indication": { "canonical": "", "source_value": "", "aliases": [] },
+  "drug_or_program": { "canonical": "", "source_value": "", "aliases": [] },
+  "organization": { "canonical": "", "source_value": "", "aliases": [] },
+  "attributes": {
+    "development_stage": null,
+    "status": null,
+    "target_or_mechanism": null
+  },
+  "claims": [],
+  "discovery": {
+    "query": "",
+    "retrieved_at": "2026-08-22T00:00:00.000Z",
+    "factory_version": ""
+  },
+  "validation_verdict": "PENDING"
+}
+```
+
+### Evidence claim and validation verdict
+
+Every material assertion is represented as a claim containing:
+
+- `claim.id`, subject, predicate, and value.
+- Source URL, source type, retrieval time, verbatim evidence text, and a page,
+  section, selector, or other resolvable locator when available.
+- Content hash and the `factory.version` that extracted it.
+- Whether the source is primary, secondary, or an unverified lead.
+- Validator verdict: `ACCEPT`, `REJECT`, `AMBIGUOUS`, or `INSUFFICIENT_EVIDENCE`.
+- Machine-readable reason, confidence band, checks performed, and reviewing actor.
+
+High-impact claims defined by the brief require at least two independent
+sources unless the brief explicitly allows one authoritative primary source.
+Mirrors, syndicated press releases, and copies of one underlying document do
+not count as independent corroboration.
 
 ### Development-stage vocabulary
 
@@ -380,6 +486,49 @@ Check at minimum:
 - The comparison stage must not interpret failed extraction as program removal.
 - Other healthy sources may complete processing, but no combined release can bypass the failed-source policy defined by the brief.
 
+### 9.1 Evidence-grounded competitive discovery
+
+Competitive discovery is an optional M4 capability layered on the proven
+five-source acquisition and repair foundation. It follows these rules:
+
+1. **Hierarchical decomposition:** indication → organizations/assets → drug or
+   program candidates → attributes. Lower-level searches may run in parallel,
+   subject to the configured budget.
+2. **Explorer/Validator separation:** the Explorer proposes candidates and may
+   favor recall; it cannot approve its own outputs. The Validator applies a
+   conservative evidence contract and records rejection reasons.
+3. **Bounded research:** each candidate has configurable search-query,
+   iteration, time, and tool-call budgets. The MVP defaults to no more than
+   three reasoning/search iterations and four parallel queries per step.
+4. **Structured step summaries:** after each research step, the system stores a
+   compact fact/evidence state rather than relying on an ever-growing transcript.
+5. **Alias resolution:** deterministic identifiers and dictionaries are used
+   first. A language model may propose ambiguous equivalence; uncertain merges
+   require analyst review and never erase original names.
+6. **Evidence contract:** every accepted candidate and material attribute has
+   explicit, recoverable evidence. A search-result snippet alone is not evidence.
+7. **Attribute-specific validation:** stage/status, organization, indication,
+   target, and mechanism use separate checks. Mechanism-of-action claims require
+   stronger evidence or analyst review because they are especially error-prone.
+8. **No silent overwrite:** web discovery and enrichment add namespaced claims;
+   they do not overwrite a scraped primary-source statement.
+
+### 9.2 Evaluation and deployment gate
+
+- Version prompts, policies, alias dictionaries, schemas, and benchmark datasets
+  with the originating `change.id` and resulting `factory.version`.
+- Use chronological splits where possible: older reviewed examples for
+  development and newer hidden examples for final regression evaluation.
+- Report candidate-level precision, recall, and F1 plus attribute-level scores
+  and evidence-completeness rate. Dataset limitations and human-labeling policy
+  must accompany every score.
+- Port blocks deployment when a required evaluation falls below the brief's
+  minimum threshold or exceeds its allowed regression budget.
+- A language-model judge may assist evaluation but cannot be the sole oracle;
+  reviewed examples and deterministic evidence checks are required.
+- Exploration results may be visible as leads, but only validator-passing and
+  human-approved records may enter a released dataset.
+
 ## 10. Scientific enrichment
 
 ### Open Targets
@@ -439,6 +588,10 @@ Ambiguous record matching is sent for review rather than reported as a fact.
 - Dataset
 - Factory Run
 - Repair
+- Competitor Candidate
+- Evidence Claim
+- Validation Verdict
+- Evaluation Run
 
 ### Required relationships
 
@@ -456,6 +609,10 @@ Factory Run may_trigger Repair
 Repair requests Software Change
 Repair repairs Scraper
 Dataset contains Drug Program records or summary links
+Competitor Candidate concerns Disease
+Competitor Candidate supported_by Evidence Claim
+Competitor Candidate evaluated_by Validation Verdict
+Software Change verified_by Evaluation Run
 ```
 
 ### Required workflows
@@ -473,9 +630,27 @@ Dataset contains Drug Program records or summary links
 - Preserve actor, timestamp, reason, inputs, outputs, and decisions.
 - Prevent rejected or unapproved candidates from becoming active releases.
 - Prevent rejected or unapproved software changes from becoming active factory versions.
+- Present ambiguous aliases, insufficient evidence, and high-impact candidate
+  claims for explicit analyst review.
+- Block software deployment when required research evaluations regress beyond
+  the configured budget.
 
 Port MCP access, if used, must be least-privilege and restricted to authorized
 entity reads and workflow actions.
+
+### 12.1 Sponsor tool utilization
+
+| Sponsor tool | Factory responsibility | Required proof |
+|---|---|---|
+| Bright Data | Acquire approved web sources, execute bounded discovery/validation searches, retain source artifacts, and support scraper repair previews and re-scrapes. | Real terminal-driven scrape; recoverable URLs/evidence; controlled failure and approved repair while retaining the stable Collector ID. |
+| Port | Hold briefs, entities, factory/run state, software-change approvals, repair approvals, alias/evidence review, evaluation gates, and final dataset decisions. | An unapproved or rejected software change cannot deploy; an ambiguous or rejected candidate cannot release; actor, rationale, and timestamps are auditable. |
+| SigNoz | Observe build, acquisition, research, validation, evaluation, deployment, and repair through correlated OpenTelemetry traces, metrics, logs, dashboards, and alerts. | A reviewer can find a run by `run.id`, identify the source/claim/check that failed, see the active `factory.version`, and follow the repair outcome without terminal output. |
+
+The integrations are complementary rather than interchangeable: Bright Data
+provides acquisition and web evidence, Port provides governance and business
+state, and SigNoz provides operational truth and diagnosis. Mend remains the
+orchestrating software factory and system of record for versioned code and
+immutable intelligence artifacts.
 
 ## 13. OpenTelemetry and SigNoz specification
 
@@ -493,6 +668,11 @@ software.change
 factory.run
 ├── source.scrape
 ├── records.normalize
+├── research.discover
+├── research.search
+├── research.summarize
+├── alias.resolve
+├── candidate.validate
 ├── records.validate
 ├── records.enrich.open_targets
 ├── records.enrich.chembl
@@ -525,6 +705,15 @@ validation_failures_total
 repair_attempts_total
 repair_success_total
 release_decisions_total
+discovery_candidates_total
+validator_decisions_total
+validator_acceptance_ratio
+evidence_sources_per_candidate
+alias_reviews_total
+benchmark_precision
+benchmark_recall
+benchmark_f1
+evaluation_regressions_total
 ```
 
 Dimensions are bounded to fields such as source, stage, outcome, and failure
@@ -546,6 +735,8 @@ The MVP dashboard shows:
 - P50/P95 factory and scrape latency.
 - Records extracted by source versus recent healthy behavior.
 - Validation failures by source/check.
+- Candidate discovery volume, validator outcomes, evidence completeness, and ambiguous alias reviews.
+- Precision/recall/F1 history by versioned evaluation suite and deployment-blocking regressions.
 - Repair attempts and outcomes.
 - Latest failed runs with links/pivots to correlated traces and logs.
 
@@ -629,8 +820,9 @@ Only safe, representative run evidence is committed.
 /
 ├── README.md
 ├── CODEX.md
-├── SMOKE_TESTS.md
-├── docs/MEND_MVP_SPEC.md
+├── refecen/
+│   ├── MEND_MVP_SPEC.md
+│   └── SMOKE_TESTS.md
 ├── config/sources.yaml
 ├── factory/
 │   ├── build/
@@ -683,6 +875,9 @@ boundaries rather than being discarded.
 - Duplicate, missingness, count-collapse, and invalid-stage detection.
 - Stable record identity and all supported diff types.
 - Enrichment no-match, timeout, and citation behavior.
+- Candidate, claim, and verdict schemas; evidence independence and completeness rules.
+- Deterministic aliases, ambiguous-alias routing, and preservation of source names.
+- Research iteration, concurrency, timeout, and tool-budget enforcement.
 
 ### Integration tests
 
@@ -694,6 +889,10 @@ boundaries rather than being discarded.
 - Structured API contract tests using recorded or bounded responses.
 - Port entity/workflow transitions and rejection behavior.
 - OpenTelemetry export and run/trace/log correlation.
+- Explorer produces evidence-linked candidates from saved fixtures; Validator
+  rejects unsupported candidates with machine-readable reasons.
+- Versioned evaluation suite computes precision, recall, F1, and attribute
+  scores and blocks a configured regression in Port.
 
 ### End-to-end tests
 
@@ -706,6 +905,9 @@ boundaries rather than being discarded.
 - Approval releases exactly the reviewed candidate.
 - Rejection preserves the prior release and audit trail.
 - Changed brief (for example, add COPD) reuses the same pipeline.
+- Competitive-discovery brief produces broad leads, removes an intentionally
+  unsupported candidate, routes an ambiguous alias for review, and releases
+  only the exact evidence-backed, approved candidate set.
 
 ## 19. Delivery milestones
 
@@ -740,6 +942,8 @@ boundaries rather than being discarded.
 
 - Add bounded Open Targets, ChEMBL, and PubMed enrichment.
 - Produce material change records only between healthy datasets.
+- Add bounded Explorer/Validator competitive discovery, alias review, evidence
+  claims, and versioned chronological evaluations after M2 is proven.
 
 ### M5 — Demo-ready product
 
@@ -771,6 +975,11 @@ The MVP is accepted only when all are demonstrated with real integrations:
 17. A changed brief such as `Add COPD programs` manufactures and deploys the required software through the same architecture.
 18. The minimal UI shows released intelligence and evidence without duplicating operational dashboards.
 19. The repository and committed artifacts contain no credentials.
+20. Every accepted competitive candidate and material attribute has recoverable evidence and a validation verdict.
+21. Ambiguous aliases and insufficient-evidence candidates cannot silently enter a released dataset.
+22. A versioned evaluation suite reports precision, recall, F1, attribute scores, and evidence completeness for applicable software changes.
+23. Port blocks a deliberately regressed research-agent or validator version from deployment.
+24. Bright Data acquisition, Port governance, and SigNoz observability are all linked by the same `run.id`, `change.id`, and `factory.version` where applicable.
 
 ## 21. Open decisions
 
@@ -806,3 +1015,7 @@ These are intentionally unresolved and must be decided before their dependent mi
 - Human rejects one candidate to prove the prior release remains active.
 - Human approves the verified candidate and Mend shows the new release.
 - Changed brief adds COPD by manufacturing and deploying a new versioned source change through the same build loop.
+- Explorer shows a broad candidate set with bounded search execution and structured summaries.
+- Validator rejects one unsupported candidate with a cited reason and routes one ambiguous alias to Port.
+- SigNoz shows research, alias-resolution, validation, evidence, and evaluation spans and metrics.
+- Port blocks one deliberate evaluation regression and releases only the exact evidence-backed candidate set approved by the analyst.
