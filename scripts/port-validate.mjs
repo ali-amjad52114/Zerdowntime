@@ -21,6 +21,7 @@ for (const relative of manifest.blueprints ?? []) {
 
 for (const blueprint of blueprints.values()) {
   for (const [name, relation] of Object.entries(blueprint.relations)) {
+    if (relation.many && relation.required) errors.push(`${blueprint.identifier}.${name} cannot be required when many=true`);
     if (!blueprints.has(relation.target)) errors.push(`${blueprint.identifier}.${name} targets unknown blueprint '${relation.target}'`);
   }
 }

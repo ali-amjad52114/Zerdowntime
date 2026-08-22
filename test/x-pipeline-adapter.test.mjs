@@ -72,3 +72,18 @@ test('validation rejects missing identity, evidence, and excessive missingness',
   assert.ok(validation.reasons.some((reason) => reason.startsWith('MISSING_EVIDENCE')));
   assert.ok(validation.reasons.includes('EXCESSIVE_MISSINGNESS'));
 });
+
+test('normalizer accepts Bright Data evidence_excerpt output', () => {
+  const [record] = normalizeXPipeline([{
+    organization: 'Arrowhead Pharmaceuticals',
+    program: 'Fazirsiran (ARO-AAT)',
+    disease: 'Alpha-1 Liver Disease',
+    target_mechanism: 'Liver',
+    development_stage: 'Phase 3',
+    source_url: 'https://arrowheadpharma.com/en-us/pipeline',
+    evidence_excerpt: 'Fazirsiran (ARO-AAT): Alpha-1 Liver Disease (Phase 3)',
+  }], { retrieved_at: '2026-08-22T15:00:00.000Z' });
+
+  assert.equal(record.evidenceText, 'Fazirsiran (ARO-AAT): Alpha-1 Liver Disease (Phase 3)');
+  assert.equal(validateXPipeline([record], { maxMissingRatio: 0.67 }).status, 'PASS');
+});

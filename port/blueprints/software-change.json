@@ -27,6 +27,6 @@
   "relations": {
     "brief": { "title": "Scientific brief", "target": "mendScientificBrief", "required": true, "many": false },
     "workflow_run": { "title": "Factory workflow run", "target": "zdWorkflowRun", "required": true, "many": false },
-    "integrations": { "title": "Affected integrations", "target": "mendAxisIntegration", "required": true, "many": true }
+    "integrations": { "title": "Affected integrations", "target": "mendAxisIntegration", "required": false, "many": true }
   }
 }

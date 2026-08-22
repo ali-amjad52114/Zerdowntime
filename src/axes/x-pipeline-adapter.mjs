@@ -47,7 +47,7 @@ export function normalizeXPipeline(rawRecords, snapshot = {}) {
       status: text(raw.status),
       sourceUrl: text(raw.source_url ?? snapshot.source_url),
       retrievedAt: text(raw.retrieved_at ?? snapshot.retrieved_at),
-      evidenceText: text(raw.evidence ?? raw.evidence_text),
+      evidenceText: text(raw.evidence ?? raw.evidence_text ?? raw.evidence_excerpt),
     };
 
     return {

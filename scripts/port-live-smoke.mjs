@@ -1,3 +1,7 @@
+import { loadLocalEnv } from "./env.mjs";
+
+loadLocalEnv();
+
 const required = ["PORT_CLIENT_ID", "PORT_CLIENT_SECRET"];
 for (const name of required) {
   if (!process.env[name]) throw new Error(`${name} is required.`);
