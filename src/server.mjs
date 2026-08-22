@@ -12,9 +12,13 @@ import { completeDiligenceTask, createDiligenceWorkflow, recordDiligenceDecision
 import { healthySnapshot, runVerticalSlice } from './mend/vertical-slice.mjs';
 import { renderTargetView } from './mend/ui.mjs';
 import { discoverDiseaseCorpus } from './mend/discovery/corpus.mjs';
-import { runSelectedTargetDiligence } from './mend/discovery/handoff.mjs';
+import { retrySelectedTargetAxis, runSelectedTargetDiligence } from './mend/discovery/handoff.mjs';
 import { discoverTargets } from './mend/discovery/targets.mjs';
 import { renderDiscoveryView } from './mend/discovery/ui.mjs';
+import { createFileStateStore } from './mend/state-store.mjs';
+import { retrieveKnownTargetCompounds } from './mend/compounds.mjs';
+import { executePortAction, portEntity } from './mend/port-control.mjs';
+import { configuredBrightDataAcquirer } from './acquisition/brightdata-cli.mjs';
 
 const fallbackFixture = [{ title: 'Product-neutral smoke record', url: 'https://example.com/smoke', fixture: true }];
 loadLocalEnv();
@@ -57,20 +61,220 @@ export function createApp({
   candidateDiscovery = discoverTargets,
   targetDiligence = runSelectedTargetDiligence,
   targetAnalyze = analyzeTarget,
+  compoundDiscovery = retrieveKnownTargetCompounds,
   fetchImpl,
   prankImpl,
+  stateStore,
+  portActionToken = process.env.MEND_PORT_ACTION_TOKEN,
+  brightDataAcquire = configuredBrightDataAcquirer(),
 } = {}) {
-  let latestMendRun = null;
-  let latestDiligenceWorkflow = null;
-  let previousHealthy = {};
-  let discoveryState = emptyDiscoveryState();
+  const restored = stateStore?.load?.() ?? {};
+  let latestMendRun = restored.latestMendRun ?? null;
+  let latestDiligenceWorkflow = restored.latestDiligenceWorkflow ?? null;
+  let previousHealthy = restored.previousHealthy ?? {};
+  let discoveryState = restored.discoveryState ?? emptyDiscoveryState();
+  const targetRuns = new Map(Object.entries(restored.targetRuns ?? {}));
+  const diligenceWorkflows = new Map(Object.entries(restored.diligenceWorkflows ?? {}));
   const analysisCache = new Map();
+  for (const analysis of restored.analyses ?? []) {
+    cacheAnalysis(analysisCache, analysis);
+    if (analysis?.target_run_id) analysisCache.set(analysis.target_run_id, analysis);
+  }
+  const compoundCache = new Map(Object.entries(restored.compoundAnalyses ?? {}));
+  const portExecutions = new Map(Object.entries(restored.portExecutions ?? {}));
+  const sourceHealingApprovals = new Map(Object.entries(restored.sourceHealingApprovals ?? {}));
+
+  function persistState() {
+    if (!stateStore?.save) return;
+    const analyses = [...new Map([...analysisCache.values()].map((analysis) => [
+      analysis?.target_run_id ?? analysis?.structure?.pdb_id ?? analysis?.uniprot_id ?? analysis?.target,
+      analysis,
+    ])).values()];
+    stateStore.save({
+      latestMendRun,
+      latestDiligenceWorkflow,
+      previousHealthy,
+      discoveryState,
+      targetRuns: Object.fromEntries(targetRuns),
+      diligenceWorkflows: Object.fromEntries(diligenceWorkflows),
+      analyses,
+      compoundAnalyses: Object.fromEntries(compoundCache),
+      portExecutions: Object.fromEntries(portExecutions),
+      sourceHealingApprovals: Object.fromEntries(sourceHealingApprovals),
+    });
+  }
+
+  function portAxisEntity(run, axis, retryCount = 0) {
+    const outcome = run.axes?.[axis] ?? {};
+    const provider = axis === 'X' ? 'ClinicalTrials.gov' : axis === 'Y' ? 'RCSB PDB' : 'EPO Linked Open Data';
+    return portEntity('mendAxisRun', `${run.runId}:${axis}`, {
+      title: `${run.target} ${axis}`,
+      axis,
+      status: outcome.validation?.status === 'PASS' ? 'succeeded' : 'failed',
+      provider,
+      retry_count: retryCount,
+      max_retries: 2,
+      record_count: outcome.records?.length ?? 0,
+      validation_status: String(outcome.validation?.status ?? 'pending').toLowerCase(),
+      failure_message: outcome.validation?.reason ?? null,
+      updated_at: new Date().toISOString(),
+      contract_version: 'mend.port-control/v1',
+    }, { target_run: run.runId });
+  }
+
+  function portTargetEntity(run, requestedAxes = ['X', 'Y', 'Z']) {
+    const now = new Date().toISOString();
+    return portEntity('mendTargetRun', run.runId, {
+      title: run.target,
+      target_name: run.target,
+      canonical_symbol: run.target,
+      status: run.status === 'HEALTHY' ? 'review' : run.status === 'DEGRADED' ? 'partial_failure' : 'failed',
+      requested_axes: requestedAxes,
+      created_at: run.created_at ?? now,
+      updated_at: now,
+      correlation_id: run.runId,
+      contract_version: 'mend.port-control/v1',
+    }, { disease_run: run.disease_run_id, candidate: run.candidate_id });
+  }
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
     const requestSpan = telemetry.startSpan(`api.${request.method.toLowerCase()} ${url.pathname}`, {
       'http.request.method': request.method, 'url.path': url.pathname,
     });
     try {
+      if (request.method === 'POST' && url.pathname === '/api/port/actions') {
+        if (!portActionToken) {
+          sendJson(response, 503, { error: 'Port action adapter is not configured' });
+          return;
+        }
+        if (request.headers.authorization !== `Bearer ${portActionToken}`) {
+          sendJson(response, 401, { error: 'unauthorized' });
+          return;
+        }
+        const envelope = await readJson(request);
+        const idempotencyKey = String(request.headers['idempotency-key'] ?? '');
+        const actions = {
+          handoff_candidate: async (action) => {
+            if (action.resource.parent_id !== discoveryState.run_id) throw new Error('Port disease run does not match active Mend discovery');
+            const candidate = discoveryState.candidates.find((item) => item.candidate_id === action.resource.id);
+            if (!candidate) throw new Error('Port candidate is not part of the active evidence-derived candidate set');
+            const existing = discoveryState.handoff.results.find((item) => item.candidate_id === candidate.candidate_id)?.run;
+            if (existing) return { status: 'conflict', message: 'candidate already has a target run', port_entities: [portTargetEntity(existing)] };
+            const run = await targetDiligence({
+              disease: discoveryState.disease,
+              target: candidate.name,
+              runId: `discovery-${candidate.candidate_id}-${randomUUID().slice(0, 8)}`,
+              diseaseRunId: discoveryState.run_id,
+              candidateId: candidate.candidate_id,
+              targetAliases: candidate.aliases ?? [],
+              uniprotId: candidate.uniprot_id ?? null,
+              pipelineAcquire: brightDataAcquire,
+              telemetry,
+              parentSpan: requestSpan,
+            });
+            const bound = { ...run, disease_run_id: discoveryState.run_id, candidate_id: candidate.candidate_id, target: candidate.name };
+            targetRuns.set(bound.runId, bound);
+            latestMendRun = bound;
+            const selected = [...new Set([...(discoveryState.selection.selected_candidate_ids ?? []), candidate.candidate_id])];
+            const results = [...discoveryState.handoff.results, { candidate_id: candidate.candidate_id, target: candidate.name, run: bound }];
+            discoveryState = {
+              ...discoveryState,
+              status: 'DILIGENCE_COMPLETE',
+              selection: { selected_candidate_ids: selected, selected_at: discoveryState.selection.selected_at ?? new Date().toISOString(), actor: action.actor, source: 'port' },
+              handoff: {
+                status: results.every((item) => item.run.status === 'HEALTHY') ? 'COMPLETE' : 'DEGRADED',
+                axes: Object.fromEntries(['X', 'Y', 'Z'].map((axis) => [axis, { status: results.every((item) => item.run.axes?.[axis]?.status === 'HEALTHY') ? 'COMPLETE' : 'NEEDS_REVIEW' }])),
+                results,
+              },
+            };
+            persistState();
+            return { port_entities: [portTargetEntity(bound, action.input.axes), ...action.input.axes.map((axis) => portAxisEntity(bound, axis))] };
+          },
+          retry_axis: async (action) => {
+            const run = targetRuns.get(action.resource.parent_id);
+            if (!run) throw new Error('unknown target run for Port axis retry');
+            const axis = action.input.axis;
+            const current = run.axes?.[axis];
+            if (current?.validation?.status !== 'FAIL') throw new Error('only a failed axis can be retried');
+            const retryCount = Number(run.retry_counts?.[axis] ?? 0);
+            if (retryCount !== action.input.expected_retry_count) throw new Error('axis retry count changed');
+            if (retryCount >= 2) throw new Error('axis retry budget exhausted');
+            const retried = await retrySelectedTargetAxis({
+              axis, existingRun: run, disease: run.disease ?? discoveryState.disease, target: run.target,
+              fetchImpl, telemetry, parentSpan: requestSpan,
+            });
+            retried.retry_counts = { ...(run.retry_counts ?? {}), [axis]: retryCount + 1 };
+            targetRuns.set(run.runId, retried);
+            if (latestMendRun?.runId === run.runId) latestMendRun = retried;
+            discoveryState = {
+              ...discoveryState,
+              handoff: { ...discoveryState.handoff, results: discoveryState.handoff.results.map((item) => item.run?.runId === run.runId ? { ...item, run: retried } : item) },
+            };
+            persistState();
+            return { port_entities: [portTargetEntity(retried), portAxisEntity(retried, axis, retryCount + 1)] };
+          },
+          approve_source_healing: async (action) => {
+            const approval = {
+              source_execution_id: action.input.source_execution_id,
+              healing_request_id: action.input.healing_request_id,
+              actor: action.actor,
+              reason: action.input.reason,
+              evidence_url: action.input.evidence_url,
+              approved_at: new Date().toISOString(),
+              port_run_id: action.port_run_id,
+            };
+            sourceHealingApprovals.set(action.input.healing_request_id, approval);
+            persistState();
+            return { port_entities: [portEntity('mendAxisRun', action.resource.id, {
+              title: action.resource.id,
+              axis: action.input.axis ?? 'X', status: 'retry_pending', provider: 'Bright Data',
+              source_execution_id: action.input.source_execution_id, retry_count: 0, max_retries: 2,
+              record_count: 0, validation_status: 'pending', evidence_url: action.input.evidence_url,
+              updated_at: approval.approved_at, contract_version: 'mend.port-control/v1',
+            }, { target_run: action.resource.parent_id })] };
+          },
+          complete_diligence_task: async (action) => {
+            const workflow = diligenceWorkflows.get(action.resource.parent_id);
+            if (!workflow) throw new Error('unknown target diligence workflow');
+            const updated = completeDiligenceTask(workflow, { taskId: action.resource.id, actor: action.actor, finding: action.input.finding });
+            diligenceWorkflows.set(updated.runId, updated);
+            latestDiligenceWorkflow = updated;
+            const task = updated.tasks.find((item) => item.id === action.resource.id);
+            persistState();
+            return { port_entities: [portEntity('mendDiligenceTask', task.id, {
+              title: task.title, task_type: task.axis === 'X' ? 'competitive_program' : task.axis === 'Y' ? 'structural_opportunity' : 'patent_triage',
+              status: 'completed', evidence_ids: action.input.evidence_ids, finding: action.input.finding,
+              outcome: action.input.outcome, completed_by: action.actor, completed_at: task.completion.completedAt,
+              contract_version: 'mend.port-control/v1',
+            }, { target_run: updated.runId })] };
+          },
+          record_target_decision: async (action) => {
+            const workflow = diligenceWorkflows.get(action.resource.id);
+            if (!workflow) throw new Error('unknown target diligence workflow');
+            const decisionMap = { proceed: 'PROCEED_TO_FOCUSED_DILIGENCE', hold: 'HOLD', escalate: 'ESCALATE' };
+            let updated = recordDiligenceDecision(workflow, {
+              decision: decisionMap[action.input.decision], actor: action.actor, rationale: action.input.rationale,
+            });
+            updated = { ...updated, decision: { ...updated.decision, evidence_ids: action.input.evidence_ids, open_risks: action.input.open_risks, port_run_id: action.port_run_id } };
+            diligenceWorkflows.set(updated.runId, updated);
+            latestDiligenceWorkflow = updated;
+            persistState();
+            return { port_entities: [portEntity('mendTargetDecision', `decision-${updated.runId}`, {
+              title: `${updated.runId} decision`, decision: action.input.decision, actor: action.actor,
+              rationale: action.input.rationale, evidence_ids: action.input.evidence_ids, open_risks: action.input.open_risks,
+              recorded_at: updated.decision.decidedAt, contract_version: 'mend.port-control/v1',
+            }, { target_run: updated.runId })] };
+          },
+        };
+        try {
+          const result = await executePortAction({ envelope, idempotencyKey, actions, executions: portExecutions });
+          persistState();
+          sendJson(response, result.status === 'conflict' ? 409 : 200, result);
+        } catch (error) {
+          sendJson(response, 409, { error: error.message });
+        }
+        return;
+      }
       if (request.method === 'GET' && url.pathname === '/health') {
         sendJson(response, 200, { ok: true, service: telemetry.serviceName });
         return;
@@ -80,15 +284,27 @@ export function createApp({
         const target = body.target;
         const uniprot_id = body.uniprot_id;
         const disease = body.disease;
+        const targetRunId = String(body.target_run_id ?? '');
+        const boundRun = targetRunId ? targetRuns.get(targetRunId) : null;
+        if (discoveryState.status !== 'NOT_STARTED' && !targetRunId) {
+          throw new Error('target_run_id is required for disease-first target analysis');
+        }
+        if (targetRunId && !boundRun) throw new Error('unknown target_run_id');
+        if (boundRun && String(boundRun.target).toUpperCase() !== String(target).toUpperCase()) {
+          throw new Error('target does not match target_run_id');
+        }
         const analyzeSpan = telemetry.startSpan('target.structure.analyze', {
           'target.name': target ?? '',
           'uniprot.id': uniprot_id ?? '',
         }, requestSpan);
         try {
-          const result = await targetAnalyze({ target, uniprot_id, disease, fetchImpl, prankImpl, cache: analysisCache });
+          const analyzed = await targetAnalyze({ target, uniprot_id, disease, fetchImpl, prankImpl, cache: analysisCache });
+          const result = { ...analyzed, target_run_id: targetRunId || null };
           analyzeSpan.setAttribute('structure.pdb_id', result.structure?.pdb_id ?? '');
           analyzeSpan.setAttribute('structure.source', result.structure?.source ?? '');
           cacheAnalysis(analysisCache, result);
+          if (targetRunId) analysisCache.set(targetRunId, result);
+          persistState();
           sendJson(response, 200, result);
         } catch (error) {
           telemetry.failSpan(analyzeSpan, error);
@@ -124,19 +340,82 @@ export function createApp({
         return;
       }
       if (request.method === 'GET' && url.pathname === '/mend/target') {
-        if (!latestMendRun) {
+        const requestedRun = url.searchParams.get('runId');
+        const selectedRun = requestedRun ? targetRuns.get(requestedRun) : latestMendRun;
+        if (!selectedRun) {
           sendJson(response, 404, { error: 'run the Mend vertical slice first' });
           return;
         }
-        sendJson(response, 200, latestMendRun);
+        sendJson(response, 200, selectedRun);
+        return;
+      }
+      if (request.method === 'POST' && url.pathname === '/target/compounds') {
+        const body = await readJson(request);
+        const targetRunId = String(body.target_run_id ?? '');
+        const boundRun = targetRunId ? targetRuns.get(targetRunId) : null;
+        if (discoveryState.status !== 'NOT_STARTED' && !targetRunId) throw new Error('target_run_id is required for disease-first compound investigation');
+        if (targetRunId && !boundRun) throw new Error('unknown target_run_id');
+        if (boundRun && String(boundRun.target).toUpperCase() !== String(body.target).toUpperCase()) throw new Error('target does not match target_run_id');
+        const compoundSpan = telemetry.startSpan('target.compounds.investigate', {
+          'target.name': String(body.target ?? ''),
+          'uniprot.id': String(body.uniprot_id ?? ''),
+          'source.provider': 'ChEMBL',
+        }, requestSpan);
+        try {
+          const discovered = await compoundDiscovery({
+            target: body.target,
+            uniprot_id: body.uniprot_id,
+            disease: body.disease,
+            maxActivities: body.maxActivities,
+            fetchImpl,
+          });
+          const result = { ...discovered, target_run_id: targetRunId || null };
+          const key = targetRunId || result.uniprot_id || result.target;
+          compoundCache.set(String(key).toUpperCase(), result);
+          compoundSpan.setAttribute('chembl.target.id', result.chembl_target?.target_chembl_id ?? '');
+          compoundSpan.setAttribute('compound.count', result.compounds?.length ?? 0);
+          persistState();
+          sendJson(response, 200, result);
+        } catch (error) {
+          telemetry.failSpan(compoundSpan, error);
+          throw error;
+        } finally {
+          compoundSpan.end();
+        }
+        return;
+      }
+      const compoundMatch = url.pathname.match(/^\/target\/([^/]+)\/compounds$/);
+      if (request.method === 'GET' && compoundMatch) {
+        const id = decodeURIComponent(compoundMatch[1]).toUpperCase();
+        const result = compoundCache.get(id);
+        if (!result) {
+          sendJson(response, 404, { error: 'not found' });
+          return;
+        }
+        sendJson(response, 200, result);
         return;
       }
       if (request.method === 'GET' && url.pathname === '/mend/diligence') {
-        if (!latestDiligenceWorkflow) {
+        const requestedRun = url.searchParams.get('runId');
+        const selectedWorkflow = requestedRun ? diligenceWorkflows.get(requestedRun) : latestDiligenceWorkflow;
+        if (!selectedWorkflow) {
           sendJson(response, 404, { error: 'create a diligence workflow first' });
           return;
         }
-        sendJson(response, 200, latestDiligenceWorkflow);
+        sendJson(response, 200, selectedWorkflow);
+        return;
+      }
+      if (request.method === 'GET' && url.pathname === '/mend/runs') {
+        sendJson(response, 200, {
+          disease_run_id: discoveryState.run_id ?? null,
+          runs: [...targetRuns.entries()].map(([runId, run]) => ({
+            runId,
+            target: run.target ?? discoveryState.handoff?.results?.find((item) => item.run?.runId === runId)?.target ?? null,
+            status: run.status,
+            publishStatus: run.publishStatus,
+            failedAxes: run.failedAxes ?? [],
+          })),
+        });
         return;
       }
       if (request.method === 'GET' && url.pathname === '/mend/discovery') {
@@ -147,6 +426,9 @@ export function createApp({
         const body = await readJson(request);
         const disease = String(body.disease ?? '').trim();
         if (!disease) throw new Error('disease is required');
+        if (body.target != null || body.targetId != null || body.uniprot_id != null) {
+          throw new Error('discovery accepts a disease only; targets must be discovered from evidence');
+        }
         const corpus = await corpusDiscovery({ disease, maxPapers: body.maxPapers ?? 50, includeAnnotations: true });
         const papers = corpus.papers.map((paper) => ({
           ...paper,
@@ -159,6 +441,7 @@ export function createApp({
           inferSymbols: (corpus.candidateLexicon ?? []).length === 0,
         });
         discoveryState = {
+          run_id: String(body.runId ?? randomUUID()),
           status: candidates.length ? 'REVIEW_REQUIRED' : 'NO_CANDIDATES',
           disease: corpus.disease,
           corpus: {
@@ -175,12 +458,15 @@ export function createApp({
         };
         latestMendRun = null;
         latestDiligenceWorkflow = null;
+        targetRuns.clear();
+        diligenceWorkflows.clear();
         requestSpan.setAttribute('discovery.disease', disease);
         requestSpan.setAttribute('discovery.papers', papers.length);
         requestSpan.setAttribute('discovery.candidates', candidates.length);
         telemetry.log('INFO', 'Disease research completed', {
-          disease, 'paper.count': papers.length, 'candidate.count': candidates.length,
+          disease, 'disease.run.id': discoveryState.run_id, 'paper.count': papers.length, 'candidate.count': candidates.length,
         }, requestSpan);
+        persistState();
         sendJson(response, 201, discoveryState);
         return;
       }
@@ -200,22 +486,38 @@ export function createApp({
         telemetry.log('INFO', 'Discovery candidates selected', {
           disease: discoveryState.disease, 'candidate.ids': candidateIds.join(','),
         }, requestSpan);
+        persistState();
         sendJson(response, 200, discoveryState);
         return;
       }
       if (request.method === 'POST' && url.pathname === '/mend/discovery/handoff') {
         const body = await readJson(request);
-        const candidateIds = [...new Set((body.candidateIds?.length ? body.candidateIds : discoveryState.selection.selected_candidate_ids).map(String))];
+        const savedSelection = new Set(discoveryState.selection.selected_candidate_ids ?? []);
+        if (!savedSelection.size || discoveryState.status !== 'CANDIDATES_SELECTED') {
+          throw new Error('save a human candidate selection before X/Y/Z handoff');
+        }
+        const candidateIds = [...new Set((body.candidateIds?.length ? body.candidateIds : [...savedSelection]).map(String))];
         if (!candidateIds.length) throw new Error('select at least one candidate before X/Y/Z handoff');
+        const unapproved = candidateIds.filter((id) => !savedSelection.has(id));
+        if (unapproved.length) throw new Error(`handoff candidate was not human-selected: ${unapproved.join(', ')}`);
         const candidates = candidateIds.map((id) => discoveryState.candidates.find((candidate) => candidate.candidate_id === id));
         if (candidates.some((candidate) => !candidate)) throw new Error('handoff contains an unknown candidate');
-        const results = await Promise.all(candidates.map((candidate) => targetDiligence({
-          disease: discoveryState.disease,
-          target: candidate.name,
-          runId: `discovery-${candidate.candidate_id}-${randomUUID().slice(0, 8)}`,
-          telemetry,
-          parentSpan: requestSpan,
-        })));
+        const results = await Promise.all(candidates.map(async (candidate) => {
+          const run = await targetDiligence({
+            disease: discoveryState.disease,
+            target: candidate.name,
+            runId: `discovery-${candidate.candidate_id}-${randomUUID().slice(0, 8)}`,
+            diseaseRunId: discoveryState.run_id,
+            candidateId: candidate.candidate_id,
+            targetAliases: candidate.aliases ?? [],
+            uniprotId: candidate.uniprot_id ?? null,
+            pipelineAcquire: brightDataAcquire,
+            telemetry,
+            parentSpan: requestSpan,
+          });
+          return { ...run, disease_run_id: discoveryState.run_id, candidate_id: candidate.candidate_id, target: candidate.name };
+        }));
+        for (const run of results) targetRuns.set(run.runId, run);
         latestMendRun = results[0] ?? null;
         latestDiligenceWorkflow = null;
         const axes = Object.fromEntries(['X', 'Y', 'Z'].map((axis) => [axis, {
@@ -232,17 +534,22 @@ export function createApp({
           },
         };
         telemetry.log('INFO', 'Selected targets handed to X/Y/Z diligence', {
-          disease: discoveryState.disease, 'candidate.ids': candidateIds.join(','), 'handoff.status': discoveryState.handoff.status,
+          disease: discoveryState.disease, 'disease.run.id': discoveryState.run_id,
+          'candidate.ids': candidateIds.join(','), 'handoff.status': discoveryState.handoff.status,
         }, requestSpan);
+        persistState();
         sendJson(response, 200, discoveryState);
         return;
       }
       if (request.method === 'POST' && url.pathname === '/mend/diligence') {
-        if (!latestMendRun) {
+        const body = await readJson(request);
+        const selectedRun = body.runId ? targetRuns.get(String(body.runId)) : latestMendRun;
+        if (!selectedRun) {
           sendJson(response, 409, { error: 'run the Mend vertical slice before creating diligence work' });
           return;
         }
-        latestDiligenceWorkflow = createDiligenceWorkflow(latestMendRun);
+        latestDiligenceWorkflow = createDiligenceWorkflow(selectedRun);
+        diligenceWorkflows.set(selectedRun.runId, latestDiligenceWorkflow);
         requestSpan.setAttribute('workflow.id', latestDiligenceWorkflow.id);
         requestSpan.setAttribute('run.id', latestDiligenceWorkflow.runId);
         telemetry.log('INFO', 'Diligence workflow created', {
@@ -251,21 +558,25 @@ export function createApp({
           'workflow.status': latestDiligenceWorkflow.status,
           recommendation: latestDiligenceWorkflow.recommendation.code,
         }, requestSpan);
+        persistState();
         sendJson(response, 201, latestDiligenceWorkflow);
         return;
       }
       const diligenceTaskMatch = url.pathname.match(/^\/mend\/diligence\/tasks\/([^/]+)\/complete$/);
       if (request.method === 'POST' && diligenceTaskMatch) {
-        if (!latestDiligenceWorkflow) {
+        const body = await readJson(request);
+        const requestedRunId = String(body.runId ?? url.searchParams.get('runId') ?? '');
+        const selectedWorkflow = requestedRunId ? diligenceWorkflows.get(requestedRunId) : latestDiligenceWorkflow;
+        if (!selectedWorkflow) {
           sendJson(response, 409, { error: 'create a diligence workflow first' });
           return;
         }
-        const body = await readJson(request);
-        latestDiligenceWorkflow = completeDiligenceTask(latestDiligenceWorkflow, {
+        latestDiligenceWorkflow = completeDiligenceTask(selectedWorkflow, {
           taskId: decodeURIComponent(diligenceTaskMatch[1]),
           actor: body.actor,
           finding: body.finding,
         });
+        diligenceWorkflows.set(latestDiligenceWorkflow.runId, latestDiligenceWorkflow);
         requestSpan.setAttribute('workflow.id', latestDiligenceWorkflow.id);
         requestSpan.setAttribute('diligence.task.id', decodeURIComponent(diligenceTaskMatch[1]));
         telemetry.log('INFO', 'Diligence task completed', {
@@ -275,16 +586,20 @@ export function createApp({
           'workflow.status': latestDiligenceWorkflow.status,
           actor: body.actor,
         }, requestSpan);
+        persistState();
         sendJson(response, 200, latestDiligenceWorkflow);
         return;
       }
       if (request.method === 'POST' && url.pathname === '/mend/diligence/decision') {
-        if (!latestDiligenceWorkflow) {
+        const body = await readJson(request);
+        const requestedRunId = String(body.runId ?? '');
+        const selectedWorkflow = requestedRunId ? diligenceWorkflows.get(requestedRunId) : latestDiligenceWorkflow;
+        if (!selectedWorkflow) {
           sendJson(response, 409, { error: 'create a diligence workflow first' });
           return;
         }
-        const body = await readJson(request);
-        latestDiligenceWorkflow = recordDiligenceDecision(latestDiligenceWorkflow, body);
+        latestDiligenceWorkflow = recordDiligenceDecision(selectedWorkflow, body);
+        diligenceWorkflows.set(latestDiligenceWorkflow.runId, latestDiligenceWorkflow);
         requestSpan.setAttribute('workflow.id', latestDiligenceWorkflow.id);
         requestSpan.setAttribute('diligence.decision', latestDiligenceWorkflow.decision.decision);
         telemetry.log('INFO', 'Diligence decision recorded', {
@@ -294,6 +609,7 @@ export function createApp({
           decision: latestDiligenceWorkflow.decision.decision,
           actor: latestDiligenceWorkflow.decision.actor,
         }, requestSpan);
+        persistState();
         sendJson(response, 200, latestDiligenceWorkflow);
         return;
       }
@@ -323,6 +639,8 @@ export function createApp({
         });
         latestDiligenceWorkflow = null;
         if (latestMendRun.status === 'HEALTHY') previousHealthy = healthySnapshot(latestMendRun);
+        targetRuns.set(latestMendRun.runId, latestMendRun);
+        persistState();
         sendJson(response, 200, latestMendRun);
         return;
       }
@@ -341,7 +659,7 @@ export function createApp({
     } catch (error) {
       telemetry.failSpan(requestSpan, error);
       const clientError = error instanceof SyntaxError
-        || /required|unknown diligence task|already complete|must be|not actionable|healthy published/.test(error.message);
+        || /required|unknown diligence task|already complete|must be|not actionable|healthy published|human candidate selection|human-selected|unknown target_run_id|target does not match/.test(error.message);
       sendJson(response, clientError ? 400 : 500, { error: error.message });
     } finally {
       requestSpan.end();
@@ -351,7 +669,7 @@ export function createApp({
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const app = createApp();
+  const app = createApp({ stateStore: createFileStateStore() });
   const port = Number(process.env.PORT ?? 3000);
   app.server.listen(port, () => console.log(`zero-downtime fixture listening on http://localhost:${port}`));
   async function stop() {

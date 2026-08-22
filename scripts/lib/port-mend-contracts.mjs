@@ -8,13 +8,17 @@ export const ACTION_CONTRACTS = Object.freeze({
       if (!Array.isArray(payload.axes) || payload.axes.length === 0 || payload.axes.some((axis) => !["X", "Y", "Z"].includes(axis))) {
         throw new Error("handoff_candidate.axes must contain one or more of X, Y, Z.");
       }
+      if (new Set(payload.axes).size !== 3 || !["X", "Y", "Z"].every((axis) => payload.axes.includes(axis))) {
+        throw new Error("handoff_candidate must run the complete X/Y/Z pipeline.");
+      }
       if (payload.expected_selection_status !== "pending") throw new Error("handoff_candidate requires expected_selection_status=pending.");
     }
   },
   retry_axis: {
     resourceType: "axis_run",
-    required: ["reason", "expected_status", "expected_retry_count"],
+    required: ["axis", "reason", "expected_status", "expected_retry_count"],
     validate(payload) {
+      if (!["X", "Y", "Z"].includes(payload.axis)) throw new Error("retry_axis.axis must be X, Y, or Z.");
       if (payload.expected_status !== "failed") throw new Error("retry_axis requires expected_status=failed.");
       if (!Number.isInteger(payload.expected_retry_count) || payload.expected_retry_count < 0) throw new Error("retry_axis.expected_retry_count must be a non-negative integer.");
     }
@@ -23,6 +27,7 @@ export const ACTION_CONTRACTS = Object.freeze({
     resourceType: "axis_run",
     required: ["source_execution_id", "healing_request_id", "reason", "evidence_url", "expected_status"],
     validate(payload) {
+      if (!["X", "Y", "Z"].includes(payload.axis)) throw new Error("approve_source_healing requires axis X, Y, or Z.");
       if (payload.expected_status !== "healing_pending") throw new Error("approve_source_healing requires expected_status=healing_pending.");
       assertHttpUrl(payload.evidence_url, "approve_source_healing.evidence_url");
     }

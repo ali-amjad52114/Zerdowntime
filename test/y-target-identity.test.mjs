@@ -5,6 +5,7 @@ import {
   CRYO_EM_SIZE_THRESHOLD_KDA,
   binVariants,
   normalizeTargetIdentity,
+  resolveUniProtTarget,
   retrieveUniProtEntry,
   runTargetIdentity,
   summarizeTargetIdentity,
@@ -165,4 +166,34 @@ test('live retrieval requires an injected fetch and surfaces transport failures'
   });
   assert.match(requested, /accession%3AP01009/);
   assert.match(requested, /cc_subcellular_location/);
+});
+
+test('resolves an arbitrary discovered gene to an exact reviewed human UniProt entry', async () => {
+  let requested;
+  const resolved = await resolveUniProtTarget({
+    target: 'EGFR',
+    fetchImpl: async (url) => {
+      requested = url;
+      return {
+        ok: true,
+        json: async () => ({ results: [{
+          primaryAccession: 'P00533',
+          genes: [{ geneName: { value: 'EGFR' } }],
+          proteinDescription: { recommendedName: { fullName: { value: 'Epidermal growth factor receptor' } } },
+        }] }),
+      };
+    },
+  });
+  assert.equal(resolved.accession, 'P00533');
+  assert.equal(resolved.match, 'exact_gene');
+  assert.match(requested, /organism_id%3A9606/);
+  assert.match(requested, /reviewed%3Atrue/);
+});
+
+test('accepts a UniProt accession without a network resolution call', async () => {
+  let calls = 0;
+  const resolved = await resolveUniProtTarget({ target: 'P00533', fetchImpl: async () => { calls += 1; } });
+  assert.equal(resolved.accession, 'P00533');
+  assert.equal(resolved.match, 'accession');
+  assert.equal(calls, 0);
 });

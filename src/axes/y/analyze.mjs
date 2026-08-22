@@ -8,7 +8,6 @@ const execFileAsync = promisify(execFile);
 const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 export const STRUCTURE_CACHE_DIR = join(ROOT, 'data', 'structures');
 export const P2RANK_CACHE_DIR = join(ROOT, 'data', 'p2rank');
-const POCKET_FIXTURE = fileURLToPath(new URL('../../../fixtures/xyz/y-pockets-serpina1.json', import.meta.url));
 
 const SELECTION_RULES = [
   'experimental > predicted',
@@ -142,11 +141,6 @@ function takeTopPockets(pockets) {
   return (pockets ?? []).map(normalizePocket).sort((left, right) => left.rank - right.rank).slice(0, 3);
 }
 
-async function loadFixturePockets() {
-  const fixture = JSON.parse(await readFile(POCKET_FIXTURE, 'utf8'));
-  return { pockets: takeTopPockets(fixture.pockets ?? fixture), pockets_source: 'fixture' };
-}
-
 async function findPredictionsCsv(roots) {
   for (const root of roots) {
     const found = await walkForPredictionsCsv(root, 0);
@@ -181,30 +175,35 @@ async function tryPrankPredict(structurePath) {
       timeout: 20_000,
       windowsHide: true,
     });
-  } catch {
-    return null;
+  } catch (error) {
+    return { pockets: [], error: `P2Rank unavailable: ${error.message}` };
   }
   const csvPath = await findPredictionsCsv([P2RANK_CACHE_DIR, `${structurePath}_out`]);
-  if (!csvPath) return null;
-  return parseP2RankPredictionsCsv(await readFile(csvPath, 'utf8'));
+  if (!csvPath) return { pockets: [], error: 'P2Rank completed without a predictions CSV' };
+  return { pockets: parseP2RankPredictionsCsv(await readFile(csvPath, 'utf8')), error: null };
 }
 
 async function runPockets({ dest, prankImpl }) {
   if (typeof prankImpl === 'function') {
-    const output = await prankImpl({ dest, structurePath: dest });
+    let output;
+    try {
+      output = await prankImpl({ dest, structurePath: dest });
+    } catch (error) {
+      return { pockets: [], pockets_source: 'unavailable', pockets_error: `P2Rank unavailable: ${error.message}` };
+    }
     if (typeof output === 'string') {
       return { pockets: parseP2RankPredictionsCsv(output), pockets_source: 'p2rank' };
     }
     if (output?.pockets_source === 'fixture') {
-      return { pockets: takeTopPockets(output.pockets), pockets_source: 'fixture' };
+      return { pockets: takeTopPockets(output.pockets), pockets_source: 'fixture', pockets_error: null };
     }
     if (Array.isArray(output)) return { pockets: takeTopPockets(output), pockets_source: 'p2rank' };
     if (Array.isArray(output?.pockets)) return { pockets: takeTopPockets(output.pockets), pockets_source: 'p2rank' };
     if (output?.csv) return { pockets: parseP2RankPredictionsCsv(output.csv), pockets_source: 'p2rank' };
   }
   const predicted = await tryPrankPredict(dest);
-  if (predicted?.length) return { pockets: predicted, pockets_source: 'p2rank' };
-  return loadFixturePockets();
+  if (predicted.pockets.length) return { pockets: predicted.pockets, pockets_source: 'p2rank', pockets_error: null };
+  return { pockets: [], pockets_source: 'unavailable', pockets_error: predicted.error };
 }
 
 /**
@@ -224,35 +223,63 @@ export async function analyzeTarget({
 
   const {
     retrieveRcsbStructures,
-    retrieveRcsbStructuresByText,
     normalizeRcsbStructures,
     rankBestStructure,
     downloadStructure,
+    downloadStructureFromUrl,
     fallbackAlphafold,
   } = await loadStructureApi();
 
-  let payload = { data: { entries: [] } };
-  if (uniprot_id) {
-    payload = await retrieveRcsbStructures({ accession: uniprot_id, fetchImpl });
-  }
-  if (!payload?.data?.entries?.length && target) {
-    payload = await retrieveRcsbStructuresByText({ target, fetchImpl });
+  let resolvedUniProt = String(uniprot_id ?? '').trim();
+  let identity_resolution = resolvedUniProt ? { accession: resolvedUniProt, match: 'provided' } : null;
+  if (!resolvedUniProt && target) {
+    const { resolveUniProtTarget } = await import('./target-identity.mjs');
+    identity_resolution = await resolveUniProtTarget({ target, fetchImpl });
+    resolvedUniProt = identity_resolution.accession;
   }
 
+  let payload = { data: { entries: [] } };
+  if (resolvedUniProt) {
+    payload = await retrieveRcsbStructures({ accession: resolvedUniProt, fetchImpl });
+  }
   const records = normalizeRcsbStructures(payload, { subject: target ?? uniprot_id });
   let best = rankBestStructure(records);
   let source = 'experimental';
   if (!best) {
-    best = await fallbackAlphafold({ uniprotId: uniprot_id, fetchImpl });
+    best = await fallbackAlphafold({ uniprotId: resolvedUniProt, fetchImpl });
     source = 'alphafold';
   }
 
   const structure = toStructureContract(best, source);
   const dest = resolveStructurePath(structure.pdb_id);
   await mkdir(STRUCTURE_CACHE_DIR, { recursive: true });
-  await downloadStructure({ pdbId: structure.pdb_id, dest, fetchImpl });
+  if (source === 'alphafold') {
+    await downloadStructureFromUrl({
+      structureUrl: best.structure_download_url,
+      structureId: structure.pdb_id,
+      dest,
+      fetchImpl,
+    });
+  } else {
+    await downloadStructure({ pdbId: structure.pdb_id, dest, fetchImpl });
+  }
 
-  const { pockets, pockets_source } = await runPockets({ dest, prankImpl });
-  const result = { target, uniprot_id, disease, structure, pockets, pockets_source };
+  const { pockets, pockets_source, pockets_error = null } = await runPockets({ dest, prankImpl });
+  const result = {
+    target,
+    uniprot_id: resolvedUniProt,
+    disease,
+    identity_resolution,
+    structure,
+    pockets,
+    pockets_source,
+    pockets_provenance: {
+      engine: pockets_source === 'p2rank' ? 'P2Rank' : pockets_source,
+      version: process.env.MEND_P2RANK_VERSION ?? null,
+      structure_id: structure.pdb_id,
+      generated_at: new Date().toISOString(),
+    },
+    pockets_error,
+  };
   return cacheAnalysis(cache, result);
 }

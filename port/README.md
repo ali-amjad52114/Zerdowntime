@@ -70,8 +70,8 @@ All five dispatch `port-mend-control.yml`. That workflow sends `POST /api/port/a
 Operation-specific `input` contracts are:
 
 - `handoff_candidate`: `axes`, `selection_reason`, `expected_selection_status=pending`.
-- `retry_axis`: `reason`, `expected_status=failed`, `expected_retry_count`.
-- `approve_source_healing`: `source_execution_id`, `healing_request_id`, `reason`, `evidence_url`, `expected_status=healing_pending`.
+- `retry_axis`: `axis`, `reason`, `expected_status=failed`, `expected_retry_count`.
+- `approve_source_healing`: `axis`, `source_execution_id`, `healing_request_id`, `reason`, `evidence_url`, `expected_status=healing_pending`.
 - `complete_diligence_task`: `finding`, `outcome`, nonempty `evidence_ids`, `expected_status=open`.
 - `record_target_decision`: `decision`, `rationale`, nonempty `evidence_ids`, `open_risks`, `expected_status=review`.
 

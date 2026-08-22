@@ -7,13 +7,14 @@
     "type": "self-service", "operation": "DAY-2", "blueprintIdentifier": "mendAxisRun",
     "userInputs": {
       "properties": {
+        "axis": { "title": "Axis", "type": "string", "enum": ["X", "Y", "Z"] },
         "source_execution_id": { "title": "Source execution ID", "type": "string" },
         "healing_request_id": { "title": "Healing request ID", "type": "string" },
         "reason": { "title": "Approval reason", "type": "string" },
         "evidence_url": { "title": "Proposed-change evidence", "type": "string", "format": "url" }
       },
-      "required": ["source_execution_id", "healing_request_id", "reason", "evidence_url"],
-      "order": ["source_execution_id", "healing_request_id", "reason", "evidence_url"]
+      "required": ["axis", "source_execution_id", "healing_request_id", "reason", "evidence_url"],
+      "order": ["axis", "source_execution_id", "healing_request_id", "reason", "evidence_url"]
     }
   },
   "invocationMethod": {
@@ -23,7 +24,7 @@
       "workflowInputs": {
         "operation": "approve_source_healing", "port_run_id": "{{ .run.id }}", "entity_id": "{{ .entity.identifier }}",
         "parent_id": "{{ .entity.relations.target_run }}", "actor": "{{ .run.triggeredBy }}",
-        "payload_json": "{\"source_execution_id\":{{ .inputs.source_execution_id | tojson }},\"healing_request_id\":{{ .inputs.healing_request_id | tojson }},\"reason\":{{ .inputs.reason | tojson }},\"evidence_url\":{{ .inputs.evidence_url | tojson }},\"expected_status\":\"healing_pending\"}"
+        "payload_json": "{\"axis\":{{ .inputs.axis | tojson }},\"source_execution_id\":{{ .inputs.source_execution_id | tojson }},\"healing_request_id\":{{ .inputs.healing_request_id | tojson }},\"reason\":{{ .inputs.reason | tojson }},\"evidence_url\":{{ .inputs.evidence_url | tojson }},\"expected_status\":\"healing_pending\"}"
       }, "reportWorkflowStatus": true
     }
   },

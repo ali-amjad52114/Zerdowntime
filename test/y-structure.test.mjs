@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   downloadStructure,
+  downloadStructureFromUrl,
   fallbackAlphafold,
   normalizeRcsbStructures,
   rankBestStructure,
@@ -162,6 +163,27 @@ test('downloadStructure writes RCSB coordinates through an injected fetch implem
     assert.deepEqual(result, { pdbId: '1QLP', dest, bytes: Buffer.byteLength(body) });
     assert.equal(await readFile(dest, 'utf8'), body);
     await assert.rejects(() => downloadStructure({ pdbId: '1QLP', dest }), /fetchImpl is required/);
+  } finally {
+    await rm(dest, { force: true });
+  }
+});
+
+test('downloadStructureFromUrl retrieves AlphaFold coordinates from the explicit provider URL', async () => {
+  const dest = join(tmpdir(), `y-alphafold-${process.pid}.pdb`);
+  let requested;
+  try {
+    const result = await downloadStructureFromUrl({
+      structureUrl: 'https://alphafold.ebi.ac.uk/files/AF-P00533-F1-model_v4.pdb',
+      structureId: 'AF-P00533-F1',
+      dest,
+      fetchImpl: async (url) => {
+        requested = url;
+        return { ok: true, text: async () => 'ALPHAFOLD PDB' };
+      },
+    });
+    assert.equal(requested, 'https://alphafold.ebi.ac.uk/files/AF-P00533-F1-model_v4.pdb');
+    assert.equal(result.pdbId, 'AF-P00533-F1');
+    assert.equal(await readFile(dest, 'utf8'), 'ALPHAFOLD PDB');
   } finally {
     await rm(dest, { force: true });
   }

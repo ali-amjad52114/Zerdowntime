@@ -73,6 +73,45 @@ export async function retrieveUniProtEntry({
   return response.json();
 }
 
+/** Resolve a discovered target name to a reviewed human UniProt accession. */
+export async function resolveUniProtTarget({
+  target,
+  fetchImpl = globalThis.fetch,
+  endpoint = DEFAULT_ENDPOINT,
+  maxCandidates = 5,
+} = {}) {
+  const normalizedTarget = text(target);
+  if (!normalizedTarget) throw new Error('target is required for UniProt resolution');
+  if (typeof fetchImpl !== 'function') throw new Error('fetchImpl is required');
+  if (/^(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9][A-Z][A-Z0-9]{2}[0-9])$/.test(normalizedTarget.toUpperCase())) {
+    return { accession: normalizedTarget.toUpperCase(), target: normalizedTarget, match: 'accession', candidates: [] };
+  }
+  const size = Math.max(1, Math.min(Number.parseInt(maxCandidates, 10) || 5, 10));
+  const escaped = normalizedTarget.replaceAll('"', '\\"');
+  const query = `(gene_exact:${escaped} OR protein_name:"${escaped}") AND organism_id:9606 AND reviewed:true`;
+  const fields = 'accession,gene_names,protein_name,reviewed,organism_id';
+  const url = `${endpoint}?format=json&size=${size}&fields=${fields}&query=${encodeURIComponent(query)}`;
+  const response = await fetchImpl(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
+  if (!response?.ok) throw new Error(`UniProt target resolution failed with HTTP ${response?.status ?? 'unknown'}`);
+  const payload = await response.json();
+  const candidates = (payload?.results ?? []).map((entry) => ({
+    accession: text(entry?.primaryAccession),
+    gene: text(entry?.genes?.[0]?.geneName?.value),
+    protein_name: text(entry?.proteinDescription?.recommendedName?.fullName?.value),
+  })).filter((entry) => entry.accession);
+  const exactGene = candidates.find((entry) => entry.gene?.toUpperCase() === normalizedTarget.toUpperCase());
+  const exactProtein = candidates.find((entry) => entry.protein_name?.toUpperCase() === normalizedTarget.toUpperCase());
+  const selected = exactGene ?? exactProtein ?? candidates[0];
+  if (!selected) throw new Error(`UniProt could not resolve target ${normalizedTarget}`);
+  return {
+    accession: selected.accession,
+    target: normalizedTarget,
+    match: exactGene ? 'exact_gene' : exactProtein ? 'exact_protein' : 'top_reviewed_human_result',
+    candidates,
+    request_url: url,
+  };
+}
+
 /** Normalize a UniProtKB search response into one canonical Y evidence record. */
 export function normalizeTargetIdentity(payload, {
   retrievedAt = new Date().toISOString(),

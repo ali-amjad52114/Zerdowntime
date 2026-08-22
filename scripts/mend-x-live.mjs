@@ -29,7 +29,7 @@ const request = createBrightDataAcquisitionRequest({
     aliases: list('MEND_TARGET_ALIASES'),
     identifiers: { uniprot: process.env.MEND_TARGET_UNIPROT_ID || null },
   },
-  matchPolicy: process.env.MEND_X_MATCH_POLICY ?? 'disease_or_target',
+  matchPolicy: process.env.MEND_X_MATCH_POLICY ?? 'disease_and_target',
   source: {
     kind: 'scraper_studio_collector', assetId: process.env.MEND_X_COLLECTOR_ID,
     url: process.env.MEND_X_TARGET_URL,
@@ -44,6 +44,9 @@ const cli = spawnSync(process.execPath, [
 ], { encoding: 'utf8', env: process.env });
 if (cli.stderr) process.stderr.write(cli.stderr);
 if (cli.error || cli.status !== 0) process.exit(cli.status ?? 1);
+const providerRunId = process.env.MEND_X_PROVIDER_RUN_ID
+  || cli.stderr?.match(/response_id:\s*([A-Za-z0-9_-]+)/i)?.[1]
+  || null;
 
 let payload;
 try {
@@ -56,7 +59,7 @@ const adapterResult = executeBrightDataAdapter({ request, payload });
 const execution = persistBrightDataSourceExecution({
   request, payload, adapterResult,
   executionId: process.env.MEND_SOURCE_EXECUTION_ID ?? randomUUID(),
-  providerRunId: process.env.MEND_X_PROVIDER_RUN_ID || null,
+  providerRunId,
   startedAt, mode: 'live',
 });
 process.stdout.write(`${JSON.stringify({ execution, result: adapterResult }, null, 2)}\n`);

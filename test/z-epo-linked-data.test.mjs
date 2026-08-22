@@ -21,6 +21,15 @@ test('EPO query is bounded and includes configured SERPINA1/AATD terms', () => {
   assert.throws(() => buildEpoIpActivityQuery({ limit: 51 }), /between 1 and 50/);
 });
 
+test('EPO query contains only the active disease, target, and supplied aliases', () => {
+  const query = buildEpoIpActivityQuery({ target: 'EGFR', disease: 'Glioblastoma', aliases: ['ERBB1'], limit: 10 });
+  assert.match(query, /egfr/);
+  assert.match(query, /glioblastoma/);
+  assert.match(query, /erbb1/);
+  assert.doesNotMatch(query, /antitrypsin/i);
+  assert.match(query, /LIMIT 10/);
+});
+
 test('EPO bindings normalize to the source-agnostic Z adapter contract', () => {
   const [record] = normalizeEpoBindings(response, { target: 'SERPINA1', disease: 'AATD' });
   assert.equal(record.publication_identifier, 'EP1234567A1');

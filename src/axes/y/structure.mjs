@@ -278,13 +278,23 @@ export async function downloadStructure({ pdbId, dest, fetchImpl } = {}) {
   if (!normalizedId) throw new Error('pdbId is required');
   if (!dest) throw new Error('dest is required');
 
-  const response = requireOk(
-    await fetchImpl(`https://files.rcsb.org/download/${normalizedId}.pdb`),
-    'RCSB structure download',
-  );
+  const sourceUrl = `https://files.rcsb.org/download/${normalizedId}.pdb`;
+  const response = requireOk(await fetchImpl(sourceUrl), 'RCSB structure download');
   const text = await response.text();
   await writeFile(dest, text);
   return { pdbId: normalizedId, dest, bytes: Buffer.byteLength(text) };
+}
+
+/** Download coordinates from an explicit provider URL, used for predicted models. */
+export async function downloadStructureFromUrl({ structureUrl, structureId, dest, fetchImpl } = {}) {
+  if (typeof fetchImpl !== 'function') throw new Error('fetchImpl is required');
+  const normalizedUrl = String(structureUrl ?? '').trim();
+  if (!/^https:\/\//i.test(normalizedUrl)) throw new Error('an https structureUrl is required');
+  if (!dest) throw new Error('dest is required');
+  const response = requireOk(await fetchImpl(normalizedUrl), 'structure download');
+  const text = await response.text();
+  await writeFile(dest, text);
+  return { pdbId: String(structureId ?? '').trim() || null, dest, sourceUrl: normalizedUrl, bytes: Buffer.byteLength(text) };
 }
 
 /** Return AlphaFold metadata when RCSB has no entries; do not predict locally. */

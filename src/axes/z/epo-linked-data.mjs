@@ -4,19 +4,19 @@ function sparqlString(value) {
   return String(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 }
 
-export function buildEpoIpActivityQuery({ target = 'SERPINA1', disease = 'Alpha-1 Antitrypsin Deficiency', limit = 25 } = {}) {
+export function buildEpoIpActivityQuery({ target, disease, aliases = [], limit = 25 } = {}) {
   if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new Error('EPO result limit must be between 1 and 50');
-  const terms = [target, disease, 'alpha-1 antitrypsin', 'antitrypsin'].map((term) => sparqlString(term.toLowerCase()));
+  const terms = [...new Set([target, disease, ...aliases].map((term) => String(term ?? '').trim()).filter(Boolean))]
+    .map((term) => sparqlString(term.toLowerCase()));
+  if (!terms.length) throw new Error('EPO query requires a target, disease, or alias');
+  const filters = terms.map((term) => `CONTAINS(LCASE(STR(?title)), "${term}")`).join(' ||\n    ');
   return `PREFIX patent: <http://data.epo.org/linked-data/def/patent/>
 SELECT DISTINCT ?publication ?title ?date WHERE {
   ?publication patent:titleOfInvention ?title .
   OPTIONAL { ?publication patent:publicationDate ?date }
   FILTER(LANG(?title) = "" || LANGMATCHES(LANG(?title), "en"))
   FILTER(
-    CONTAINS(LCASE(STR(?title)), "${terms[0]}") ||
-    CONTAINS(LCASE(STR(?title)), "${terms[1]}") ||
-    CONTAINS(LCASE(STR(?title)), "${terms[2]}") ||
-    CONTAINS(LCASE(STR(?title)), "${terms[3]}")
+    ${filters}
   )
 }
 LIMIT ${limit}`;

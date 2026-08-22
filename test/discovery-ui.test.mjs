@@ -30,7 +30,7 @@ test('renders discovery input, corpus, scored evidence, selection, and X/Y/Z han
   assert.match(html, /Start research/);
   assert.match(html, /SERPINA1 review/);
   assert.match(html, /2[\s\S]*papers and resources/);
-  assert.match(html, /91%/);
+  assert.match(html, /Candidate score 0\.91/);
   assert.match(html, /Supporting passages/);
   assert.match(html, /SERPINA1 variants cause AATD/);
   assert.match(html, /Contradictory passages/);

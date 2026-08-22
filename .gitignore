@@ -5,6 +5,8 @@ node_modules/
 artifacts/
 data/structures/
 data/p2rank/
+data/mend-state.json
+data/mend-state.json.*.tmp
 tmp/
 observability/signoz/pours/
 observability/signoz/casting.yaml.lock

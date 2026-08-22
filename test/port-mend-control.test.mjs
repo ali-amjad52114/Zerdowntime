@@ -57,7 +57,7 @@ test("action envelopes are versioned, idempotent, validated, and result-correlat
   assert.equal(envelope.idempotency_key, "port-run-17");
   assert.equal(envelope.resource.parent_id, "disease-1");
   assert.deepEqual(envelope.correlation, { "port.run.id": "port-run-17", "candidate.id": "candidate-2", "disease.run.id": "disease-1" });
-  assert.throws(() => buildMendPortEnvelope({ ...envelope, action: "retry_axis", portRunId: "x", entityId: "a", parentId: "t", actor: "r", payload: { reason: "again", expected_status: "failed", expected_retry_count: -1 } }), /non-negative integer/);
+  assert.throws(() => buildMendPortEnvelope({ ...envelope, action: "retry_axis", portRunId: "x", entityId: "a", parentId: "t", actor: "r", payload: { axis: "X", reason: "again", expected_status: "failed", expected_retry_count: -1 } }), /non-negative integer/);
   const result = {
     contract_version: MEND_PORT_CONTRACT_VERSION, port_run_id: "port-run-17", action_execution_id: "mend-action-9", status: "accepted",
     port_entities: [{ blueprint: "mendCandidateTarget", entity: { identifier: "candidate-2", properties: { selection_status: "handed_off" } } }]
