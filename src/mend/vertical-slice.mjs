@@ -97,6 +97,7 @@ export async function runVerticalSlice({
   runId = randomUUID(),
   telemetry,
   parentSpan,
+  correlation = {},
 } = {}) {
   const startedAt = performance.now();
   for (const axis of AXES) {
@@ -106,12 +107,13 @@ export async function runVerticalSlice({
     throw new Error('mode must be normal, break-x, or repaired');
   }
 
-  const root = startSpan(telemetry, 'factory.run', {
+  const correlatedTelemetry = telemetry?.bindCorrelation?.({ ...correlation, runId }) ?? telemetry;
+  const root = startSpan(correlatedTelemetry, 'factory.run', {
     'run.id': runId,
     'factory.version': factoryVersion,
     'run.mode': mode,
   }, parentSpan);
-  if (mode === 'repaired') telemetry?.metrics?.repairAttempts?.add(1, { axis: 'X', 'run.id': runId });
+  if (mode === 'repaired') telemetry?.metrics?.repairAttempts?.add(1, correlatedTelemetry?.attributes?.({ axis: 'X' }) ?? { axis: 'X', 'run.id': runId });
   let finalStatus = 'ERROR';
   try {
     const outcomes = await Promise.all(AXES.map((axis) => executeAxis({
@@ -120,7 +122,7 @@ export async function runVerticalSlice({
       mode: axis === 'X' && mode === 'break-x' ? 'broken' : mode === 'repaired' ? 'repaired' : 'normal',
       previousHealthy: previousHealthy[axis],
       runId,
-      telemetry,
+      telemetry: correlatedTelemetry,
       parentSpan: root,
     })));
 
@@ -138,9 +140,9 @@ export async function runVerticalSlice({
     root.setAttribute('publish.status', publishStatus);
     root.setAttribute('failed.axes', failedAxes.join(','));
     if (mode === 'repaired' && status === 'HEALTHY') {
-      telemetry?.metrics?.repairSuccess?.add(1, { axis: 'X', 'run.id': runId });
+      telemetry?.metrics?.repairSuccess?.add(1, correlatedTelemetry?.attributes?.({ axis: 'X' }) ?? { axis: 'X', 'run.id': runId });
     }
-    telemetry?.log?.(status === 'HEALTHY' ? 'INFO' : 'ERROR', `Mend factory run ${status.toLowerCase()}`, {
+    correlatedTelemetry?.log?.(status === 'HEALTHY' ? 'INFO' : 'ERROR', `Mend factory run ${status.toLowerCase()}`, {
       'run.id': runId,
       'factory.version': factoryVersion,
       'factory.status': status,
@@ -158,8 +160,8 @@ export async function runVerticalSlice({
     };
   } finally {
     const duration = performance.now() - startedAt;
-    telemetry?.metrics?.factoryRuns?.add(1, { outcome: finalStatus, 'run.id': runId });
-    telemetry?.metrics?.factoryDuration?.record(duration, { outcome: finalStatus, 'run.id': runId });
+    telemetry?.metrics?.factoryRuns?.add(1, correlatedTelemetry?.attributes?.({ outcome: finalStatus }) ?? { outcome: finalStatus, 'run.id': runId });
+    telemetry?.metrics?.factoryDuration?.record(duration, correlatedTelemetry?.attributes?.({ outcome: finalStatus }) ?? { outcome: finalStatus, 'run.id': runId });
     root.end();
   }
 }

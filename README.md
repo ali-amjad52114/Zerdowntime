@@ -307,5 +307,9 @@ preserved.
 
 To verify the hosted SigNoz MCP connection, set `SIGNOZ_URL` to the exact
 workspace URL shown in the browser and keep `SIGNOZ_API_KEY` in the user
-environment or ignored `.env.local`, then run `npm run signoz:mcp:smoke`.
-`SIGNOZ_URL` and `SIGNOZ_MCP_URL` are different values.
+environment or ignored `.env.local`. The service-account API key authorizes
+API/MCP reads only; it is not the `signoz-ingestion-key` used by OTLP. Run
+`npm run signoz:g3:smoke`, copy its non-secret identifiers into the matching
+`SIGNOZ_VERIFY_*` variables, then run `npm run signoz:mcp:smoke`. The latter
+saves redacted exact-run counts and actual MCP request identifiers under
+`artifacts/signoz/`. `SIGNOZ_URL` and `SIGNOZ_MCP_URL` are different values.

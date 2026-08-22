@@ -31,6 +31,14 @@ export const CORRELATION_ATTRIBUTE_KEYS = Object.freeze([
   'brightdata.collector.id',
   'brightdata.dataset.id',
   'port.run.id',
+  'sponsor.request.id',
+  'sponsor.result.id',
+  'action.execution.id',
+  'retry.attempt',
+  'healing.request.id',
+  'diligence.task.id',
+  'diligence.decision.id',
+  'workflow.id',
   'validation.status',
 ]);
 
@@ -45,11 +53,19 @@ const CORRELATION_ALIASES = Object.freeze({
   brightdataCollectorId: 'brightdata.collector.id',
   brightdataDatasetId: 'brightdata.dataset.id',
   portRunId: 'port.run.id',
+  sponsorRequestId: 'sponsor.request.id',
+  sponsorResultId: 'sponsor.result.id',
+  actionExecutionId: 'action.execution.id',
+  retryAttempt: 'retry.attempt',
+  healingRequestId: 'healing.request.id',
+  diligenceTaskId: 'diligence.task.id',
+  diligenceDecisionId: 'diligence.decision.id',
+  workflowId: 'workflow.id',
   validationStatus: 'validation.status',
 });
 
-const SENSITIVE_KEY = /(?:^|[._-])(authorization|cookie|password|passwd|secret|token|api[._-]?key)(?:$|[._-])/i;
-const SENSITIVE_TEXT = /(bearer\s+)[a-z0-9._~+/=-]+|((?:api[._-]?key|password|secret|token)\s*[=:]\s*)[^\s,;]+/gi;
+const SENSITIVE_KEY = /(?:^|[._-])(authorization|cookie|password|passwd|secret|token|credentials?|(?:api|ingestion|signoz)[._-]?key|headers?)(?:$|[._-])/i;
+const SENSITIVE_TEXT = /(bearer\s+)[a-z0-9._~+/=-]+|((?:authorization|api[._-]?key|signoz[._-]?ingestion[._-]?key|ingestion[._-]?key|password|secret|token)\s*[=:]\s*)[^\s,;]+/gi;
 
 export function redactSensitiveText(value) {
   return typeof value === 'string'
@@ -138,6 +154,12 @@ export function createTelemetry(options = {}) {
     sourceExecutions: meter.createCounter('mend_source_executions_total', { description: 'Mend source and sponsor executions' }),
     sourceDuration: meter.createHistogram('mend_source_execution_duration_ms', { unit: 'ms', description: 'Mend source and sponsor execution duration' }),
     sourceFailures: meter.createCounter('mend_source_execution_failures_total', { description: 'Failed Mend source and sponsor executions' }),
+    sponsorRequests: meter.createCounter('mend_sponsor_requests_total', { description: 'External sponsor requests' }),
+    sponsorResults: meter.createCounter('mend_sponsor_results_total', { description: 'External sponsor results' }),
+    retries: meter.createCounter('mend_retries_total', { description: 'Bounded axis retry attempts' }),
+    healing: meter.createCounter('mend_healing_decisions_total', { description: 'Human source-healing decisions' }),
+    diligenceTasks: meter.createCounter('mend_diligence_tasks_total', { description: 'Diligence task lifecycle events' }),
+    diligenceDecisions: meter.createCounter('mend_diligence_decisions_total', { description: 'Target diligence decisions' }),
   };
 
   function contextFor(span) {
@@ -175,9 +197,11 @@ export function createTelemetry(options = {}) {
   function bindCorrelation(correlation = {}) {
     const bound = { ...baseCorrelation, ...correlationAttributes(correlation) };
     return {
+      metrics,
       attributes: (attributes = {}) => ({ ...sanitizeTelemetryAttributes(attributes), ...bound }),
       startSpan: (name, attributes = {}, parentSpan) => startSpan(name, { ...attributes, ...bound }, parentSpan),
       log: (severityText, body, attributes = {}, span) => log(severityText, body, { ...attributes, ...bound }, span),
+      failSpan,
     };
   }
 

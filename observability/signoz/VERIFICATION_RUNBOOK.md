@@ -28,6 +28,14 @@ spellings in an adapter.
 | `brightdata.collector.id` | Bright Data collector identifier, when applicable |
 | `brightdata.dataset.id` | Bright Data dataset identifier, when applicable |
 | `port.run.id` | Port action/run identifier, when applicable |
+| `sponsor.request.id` | One outbound sponsor/API request identifier |
+| `sponsor.result.id` | The corresponding nonempty sponsor/API result identifier |
+| `action.execution.id` | Mend/Port action result execution identifier |
+| `retry.attempt` | Bounded retry attempt number |
+| `healing.request.id` | Human-gated source healing request |
+| `diligence.task.id` | Evidence-linked diligence task |
+| `diligence.decision.id` | Final human target decision |
+| `workflow.id` | Diligence workflow containing task/decision events |
 | `validation.status` | Normalization or validation result |
 
 `createTelemetry().bindCorrelation(...)` accepts both these dotted names and
@@ -42,23 +50,35 @@ responsible for emitting only safe metadata.
 
 ## Local and cloud procedure
 
-1. Configure `SIGNOZ_URL`, `SIGNOZ_MCP_URL`, `SIGNOZ_API_KEY`,
-   `OTEL_EXPORTER_OTLP_ENDPOINT`, and `OTEL_EXPORTER_OTLP_HEADERS` outside Git.
+1. Configure credentials outside Git, keeping the two authentication planes
+   separate:
+   - `SIGNOZ_URL`, `SIGNOZ_MCP_URL`, and the service-account
+     `SIGNOZ_API_KEY` authorize read-only API/MCP verification.
+   - `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` containing
+     `signoz-ingestion-key=...` authorize OTLP ingestion. The service-account
+     API key is not an ingestion key and must never be copied into OTLP headers.
 2. Run `npm run signoz:verify`.
    - Required result: `transportReachability=PASS`.
    - Expected: emission and readback remain `NOT_RUN`.
-3. Run `npm run mend:telemetry:smoke` or `npm run telemetry:smoke`.
-   - Retain a non-secret run ID from the output.
+3. Run `npm run signoz:g3:smoke`.
+   - Retain the non-secret correlation object and `g3-emission.json` output.
+   - The controlled run emits X/Y/Z sponsor request/result events plus retry,
+     healing, task, decision, Port, disease, candidate, and target correlation.
+   - It refuses to invent a Bright Data collector ID and requires the configured
+     collector ID from the environment.
    - A clean process exit proves only that the application completed its export
      path; it does not prove SigNoz stored the data.
-4. Set `SIGNOZ_VERIFY_RUN_ID` to that exact run ID and run
-   `npm run signoz:mcp:smoke` within one hour.
+4. Copy the emitted identifiers into the matching `SIGNOZ_VERIFY_*` variables
+   documented in `.env.example`, then run `npm run signoz:mcp:smoke` within one
+   hour. The verifier saves redacted `artifacts/signoz/g3-proof.json` containing
+   actual MCP request identifiers, exact filters, counts, and metric result
+   metadata.
 5. Retain the redacted JSON result. Gate G3 requires:
    - `mcpConnectivity.status=PASS`
    - `workspaceRead.status=PASS`
    - `telemetryReadback.status=PASS`
-   - positive log and trace counts for the exact run ID
-   - positive metric rows for the expected metric name
+   - positive log and trace counts for every supplied exact-run identifier
+   - a positive metric series filtered to the exact target/run identifier
 
 The MCP verifier is read-only and therefore always reports
 `telemetryEmission.status=NOT_RUN`. Pair its output with the smoke command output
@@ -72,7 +92,7 @@ Retain these redacted items:
 - non-secret service and environment names
 - disease and target run IDs used for the test
 - smoke output showing the emitted run ID
-- MCP proof JSON showing exact-run log/trace readback
+- MCP proof JSON showing exact-run log/trace/metric readback and external MCP request IDs
 - metric name and positive rows scanned
 - screenshot or export of the dashboard filtered to the same time window
 - any failure and retry event exercised during the run

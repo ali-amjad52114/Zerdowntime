@@ -26,7 +26,10 @@ test('normalizes the complete Mend correlation contract', () => {
     runId: 'legacy-1', diseaseRunId: 'disease-1', candidateId: 'candidate-1',
     targetRunId: 'target-1', targetName: 'IL6', axis: 'x', sourceProvider: 'brightdata',
     sourceExecutionId: 'snapshot-1', brightdataCollectorId: 'collector-1',
-    brightdataDatasetId: 'dataset-1', portRunId: 'port-1', validationStatus: 'PASS', ignored: 'nope',
+    brightdataDatasetId: 'dataset-1', portRunId: 'port-1', sponsorRequestId: 'request-1',
+    sponsorResultId: 'result-1', actionExecutionId: 'action-1', retryAttempt: 2,
+    healingRequestId: 'healing-1', diligenceTaskId: 'task-1', diligenceDecisionId: 'decision-1',
+    workflowId: 'workflow-1', validationStatus: 'PASS', ignored: 'nope',
   }), {
     'run.id': 'legacy-1',
     'disease.run.id': 'disease-1',
@@ -39,10 +42,19 @@ test('normalizes the complete Mend correlation contract', () => {
     'brightdata.collector.id': 'collector-1',
     'brightdata.dataset.id': 'dataset-1',
     'port.run.id': 'port-1',
+    'sponsor.request.id': 'request-1',
+    'sponsor.result.id': 'result-1',
+    'action.execution.id': 'action-1',
+    'retry.attempt': 2,
+    'healing.request.id': 'healing-1',
+    'diligence.task.id': 'task-1',
+    'diligence.decision.id': 'decision-1',
+    'workflow.id': 'workflow-1',
     'validation.status': 'PASS',
   });
   assert.ok(CORRELATION_ATTRIBUTE_KEYS.includes('disease.run.id'));
   assert.ok(CORRELATION_ATTRIBUTE_KEYS.includes('port.run.id'));
+  assert.ok(CORRELATION_ATTRIBUTE_KEYS.includes('sponsor.result.id'));
 });
 
 test('bound telemetry applies correlation to spans and logs', async (t) => {
@@ -72,6 +84,8 @@ test('bound telemetry applies correlation to spans and logs', async (t) => {
   assert.ok(kit.telemetry.metrics.sourceExecutions);
   assert.ok(kit.telemetry.metrics.sourceDuration);
   assert.ok(kit.telemetry.metrics.sourceFailures);
+  assert.ok(kit.telemetry.metrics.sponsorRequests);
+  assert.ok(kit.telemetry.metrics.diligenceDecisions);
 });
 
 test('removes credential-shaped attributes and redacts messages', async (t) => {
@@ -97,5 +111,7 @@ test('removes credential-shaped attributes and redacts messages', async (t) => {
   assert.equal(log.attributes.password, undefined);
   assert.equal(log.attributes.detail, 'Bearer [REDACTED]');
   assert.deepEqual(sanitizeTelemetryAttributes({ token: 'x', safe: 'y' }), { safe: 'y' });
+  assert.deepEqual(sanitizeTelemetryAttributes({ 'signoz-ingestion-key': 'x', headers: 'x', safe: 'y' }), { safe: 'y' });
   assert.equal(redactSensitiveText('Bearer abc.def'), 'Bearer [REDACTED]');
+  assert.equal(redactSensitiveText('signoz-ingestion-key=abc123'), 'signoz-ingestion-key=[REDACTED]');
 });

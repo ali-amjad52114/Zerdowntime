@@ -36,6 +36,19 @@ and `source.execution.id` to locate the matching trace/source execution. If any
 of those identifiers is absent, preserve the evidence and fail the correlation
 portion of G3.
 
+## Sponsor request or result failure
+
+- Name: `Mend sponsor result missing`
+- Metric: `mend_source_execution_failures_total`
+- Group by: `source.provider`, `axis`
+- Condition: above `0` at least once in the last 5 minutes
+
+Pivot to the failed sponsor span with `target.run.id`, then require the matching
+`sponsor.request.id` and `source.execution.id`. A successful response must add a
+`sponsor.result.id`; Bright Data results must also add `brightdata.collector.id`.
+Treat a request with no result as incomplete even if the process later retries.
+Follow `retry.attempt` and `healing.request.id` to the human-gated recovery event.
+
 ## Sustained factory failures
 
 - Name: `Mend factory failures sustained`

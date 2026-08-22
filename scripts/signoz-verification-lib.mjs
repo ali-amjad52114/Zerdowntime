@@ -60,11 +60,46 @@ export function readMetricRowsScanned(body) {
   return Number(parseToolJson(text)?.data?.meta?.rowsScanned);
 }
 
+export function readMetricSeriesCount(body) {
+  const text = body?.result?.content?.map((item) => item.text).filter(Boolean).join(' ') ?? '';
+  const payload = parseToolJson(text)?.data;
+  const candidates = [payload?.data?.result, payload?.data?.results, payload?.result, payload?.results];
+  const series = candidates.find(Array.isArray);
+  return series?.length ?? 0;
+}
+
+export function verificationCorrelation(environment = process.env) {
+  return Object.fromEntries([
+    ['run.id', environment.SIGNOZ_VERIFY_RUN_ID],
+    ['disease.run.id', environment.SIGNOZ_VERIFY_DISEASE_RUN_ID],
+    ['candidate.id', environment.SIGNOZ_VERIFY_CANDIDATE_ID],
+    ['target.run.id', environment.SIGNOZ_VERIFY_TARGET_RUN_ID],
+    ['axis', environment.SIGNOZ_VERIFY_AXIS?.toUpperCase()],
+    ['source.execution.id', environment.SIGNOZ_VERIFY_SOURCE_EXECUTION_ID],
+    ['brightdata.collector.id', environment.SIGNOZ_VERIFY_BRIGHTDATA_COLLECTOR_ID],
+    ['port.run.id', environment.SIGNOZ_VERIFY_PORT_RUN_ID],
+    ['sponsor.request.id', environment.SIGNOZ_VERIFY_SPONSOR_REQUEST_ID],
+    ['sponsor.result.id', environment.SIGNOZ_VERIFY_SPONSOR_RESULT_ID],
+    ['retry.attempt', environment.SIGNOZ_VERIFY_RETRY_ATTEMPT],
+    ['healing.request.id', environment.SIGNOZ_VERIFY_HEALING_REQUEST_ID],
+    ['diligence.task.id', environment.SIGNOZ_VERIFY_TASK_ID],
+    ['diligence.decision.id', environment.SIGNOZ_VERIFY_DECISION_ID],
+  ].filter(([, value]) => value !== undefined && value !== null && value !== ''));
+}
+
+export function correlationFilter(correlation) {
+  return Object.entries(correlation).map(([key, value]) => {
+    if (key === 'retry.attempt' && Number.isFinite(Number(value))) return `${key} = ${Number(value)}`;
+    return `${key} = '${escapeFilterLiteral(value)}'`;
+  }).join(' AND ');
+}
+
 export function createProofReport({ endpoint, signozUrl }) {
   return {
     schemaVersion: 'signoz-proof/v1',
     generatedAt: new Date().toISOString(),
     endpoints: { mcp: sanitizeUrl(endpoint), workspace: sanitizeUrl(signozUrl) },
+    externalRequests: [],
     proof: {
       mcpConnectivity: { status: 'NOT_RUN' },
       workspaceRead: { status: 'NOT_RUN' },
@@ -74,7 +109,7 @@ export function createProofReport({ endpoint, signozUrl }) {
       },
       telemetryReadback: {
         status: 'NOT_RUN',
-        note: 'Set SIGNOZ_VERIFY_RUN_ID to query stored logs and traces for one emitted run.',
+        note: 'Set the SIGNOZ_VERIFY_* identifiers from signoz:g3:smoke to query exact stored logs, traces, and metrics.',
         signals: [],
       },
     },

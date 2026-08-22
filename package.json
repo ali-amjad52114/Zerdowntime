@@ -17,6 +17,7 @@
     "signoz:down": "node scripts/signoz-stack.mjs down",
     "signoz:verify": "node scripts/signoz-verify.mjs",
     "signoz:mcp:smoke": "node scripts/signoz-mcp-smoke.mjs",
+    "signoz:g3:smoke": "node scripts/signoz-g3-smoke.mjs",
     "telemetry:smoke": "node scripts/telemetry-smoke.mjs",
     "brightdata:version": "bdata --version",
     "brightdata:create": "bdata scraper create https://example.com \"Scrape only this one page. Do not follow or request links. Return exactly one flat record with page_title, heading, description, and source_url.\"",

@@ -7,7 +7,9 @@
     { "h": 6, "i": "e3641bd3-aee2-4428-990a-eab87c800de6", "moved": false, "static": false, "w": 6, "x": 0, "y": 6 },
     { "h": 6, "i": "5b6a270e-758d-44de-9af9-60686d0f411d", "moved": false, "static": false, "w": 6, "x": 6, "y": 6 },
     { "h": 6, "i": "ddad1326-9527-46d7-8db4-dfe048c2fd96", "moved": false, "static": false, "w": 6, "x": 0, "y": 12 },
-    { "h": 6, "i": "b04dbd0d-d812-47db-bbee-876d39823b9b", "moved": false, "static": false, "w": 6, "x": 6, "y": 12 }
+    { "h": 6, "i": "b04dbd0d-d812-47db-bbee-876d39823b9b", "moved": false, "static": false, "w": 6, "x": 6, "y": 12 },
+    { "h": 6, "i": "1a8cc09c-7b68-4afb-9c66-ce614572e8b1", "moved": false, "static": false, "w": 6, "x": 0, "y": 18 },
+    { "h": 6, "i": "5d973069-335f-4dc7-b09e-cf565827a8dc", "moved": false, "static": false, "w": 6, "x": 6, "y": 18 }
   ],
   "panelMap": {},
   "tags": ["mend", "zero-downtime", "opentelemetry", "gate-g3"],
@@ -96,12 +98,48 @@
         "clickhouse_sql": [{ "disabled": true, "legend": "", "name": "A", "query": "" }],
         "promql": [
           { "disabled": false, "legend": "attempts", "name": "A", "query": "sum(increase({\"mend_repair_attempts_total\"}[5m]))" },
-          { "disabled": false, "legend": "success", "name": "B", "query": "sum(increase({\"mend_repair_success_total\"}[5m]))" }
+          { "disabled": false, "legend": "success", "name": "B", "query": "sum(increase({\"mend_repair_success_total\"}[5m]))" },
+          { "disabled": false, "legend": "retries", "name": "C", "query": "sum(increase({\"mend_retries_total\"}[5m]))" }
         ],
         "queryType": "promql"
       },
       "timePreferance": "GLOBAL_TIME",
-      "title": "Mend repair activity",
+      "title": "Mend repair and retry activity",
+      "yAxisUnit": "none"
+    },
+    {
+      "description": "External sponsor requests and nonempty results. Filter by target.run.id and pivot using sponsor.request.id, sponsor.result.id, source.execution.id, and brightdata.collector.id.",
+      "id": "1a8cc09c-7b68-4afb-9c66-ce614572e8b1",
+      "panelTypes": "graph",
+      "query": {
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [{ "disabled": true, "legend": "", "name": "A", "query": "" }],
+        "promql": [
+          { "disabled": false, "legend": "requests", "name": "A", "query": "sum(increase({\"mend_sponsor_requests_total\"}[5m]))" },
+          { "disabled": false, "legend": "results", "name": "B", "query": "sum(increase({\"mend_sponsor_results_total\"}[5m]))" }
+        ],
+        "queryType": "promql"
+      },
+      "timePreferance": "GLOBAL_TIME",
+      "title": "Sponsor request/result activity",
+      "yAxisUnit": "none"
+    },
+    {
+      "description": "Human-gated healing, diligence task, and target decision events correlated by Port and target run IDs.",
+      "id": "5d973069-335f-4dc7-b09e-cf565827a8dc",
+      "panelTypes": "graph",
+      "query": {
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [{ "disabled": true, "legend": "", "name": "A", "query": "" }],
+        "promql": [
+          { "disabled": false, "legend": "healing", "name": "A", "query": "sum(increase({\"mend_healing_decisions_total\"}[5m]))" },
+          { "disabled": false, "legend": "tasks", "name": "B", "query": "sum(increase({\"mend_diligence_tasks_total\"}[5m]))" },
+          { "disabled": false, "legend": "decisions", "name": "C", "query": "sum(increase({\"mend_diligence_decisions_total\"}[5m]))" }
+        ],
+        "queryType": "promql"
+      },
+      "timePreferance": "GLOBAL_TIME",
+      "title": "Human governance activity",
       "yAxisUnit": "none"
     }
   ]

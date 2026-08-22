@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "mend-signoz-alerts/v1",
+  "rules": [
+    {
+      "name": "Mend axis validation failure",
+      "metric": "mend_validation_failures_total",
+      "filter": "",
+      "groupBy": ["axis"],
+      "window": "5m",
+      "threshold": 0,
+      "comparison": "above",
+      "severity": "warning",
+      "runbook": "ALERT_RUNBOOK.md#mend-validation-failure"
+    },
+    {
+      "name": "Mend sponsor result missing",
+      "metric": "mend_source_execution_failures_total",
+      "filter": "",
+      "groupBy": ["source.provider", "axis"],
+      "window": "5m",
+      "threshold": 0,
+      "comparison": "above",
+      "severity": "warning",
+      "runbook": "ALERT_RUNBOOK.md#sponsor-request-or-result-failure"
+    },
+    {
+      "name": "Mend factory failures sustained",
+      "metric": "mend_factory_runs_total",
+      "filter": "outcome = 'DEGRADED' OR outcome = 'ERROR'",
+      "groupBy": [],
+      "window": "15m",
+      "threshold": 2,
+      "comparison": "above",
+      "severity": "critical",
+      "runbook": "ALERT_RUNBOOK.md#sustained-factory-failures"
+    }
+  ]
+}

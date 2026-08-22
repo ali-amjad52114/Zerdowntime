@@ -223,6 +223,26 @@ export function createApp({
         }
         const envelope = await readJson(request);
         const idempotencyKey = String(request.headers['idempotency-key'] ?? '');
+        const actionCorrelation = {
+          ...(envelope.correlation ?? {}),
+          runId: envelope.resource?.parent_id ?? envelope.resource?.id,
+          portRunId: envelope.port_run_id,
+          axis: envelope.input?.axis,
+          sourceExecutionId: envelope.input?.source_execution_id,
+          healingRequestId: envelope.input?.healing_request_id,
+          diligenceTaskId: envelope.action === 'complete_diligence_task' ? envelope.resource?.id : undefined,
+          diligenceDecisionId: envelope.action === 'record_target_decision' ? `decision-${envelope.resource?.id}` : undefined,
+          sponsorRequestId: idempotencyKey,
+          sourceProvider: 'port',
+        };
+        const portTelemetry = telemetry.bindCorrelation(actionCorrelation);
+        const portActionSpan = portTelemetry.startSpan(`port.action.${envelope.action}`, {
+          'port.action': envelope.action, 'sponsor.phase': 'request',
+        }, requestSpan);
+        portTelemetry.log('INFO', 'Port sponsor request accepted', {
+          'port.action': envelope.action, 'sponsor.phase': 'request',
+        }, portActionSpan);
+        telemetry.metrics.sponsorRequests.add(1, portTelemetry.attributes({ operation: envelope.action, outcome: 'accepted' }));
         const actions = {
           handoff_candidate: async (action) => {
             const requestedAxes = requestedHandoffAxes(action.input.axes);
@@ -343,10 +363,35 @@ export function createApp({
         };
         try {
           const result = await executePortAction({ envelope, idempotencyKey, actions, executions: portExecutions });
+          const resultCorrelation = telemetry.correlationAttributes({
+            ...actionCorrelation,
+            actionExecutionId: result.action_execution_id,
+            sponsorResultId: result.action_execution_id,
+          });
+          for (const [key, value] of Object.entries(resultCorrelation)) portActionSpan.setAttribute(key, value);
+          portActionSpan.setAttribute('sponsor.phase', 'result');
+          portActionSpan.setAttribute('port.action.status', result.status);
+          portTelemetry.log('INFO', 'Port sponsor result received', {
+            ...resultCorrelation, 'port.action': envelope.action, 'port.action.status': result.status, 'sponsor.phase': 'result',
+          }, portActionSpan);
+          telemetry.metrics.sponsorResults.add(1, { ...resultCorrelation, operation: envelope.action, outcome: result.status });
+          if (envelope.action === 'approve_source_healing') {
+            telemetry.metrics.healing.add(1, { ...resultCorrelation, outcome: result.status });
+          } else if (envelope.action === 'complete_diligence_task') {
+            telemetry.metrics.diligenceTasks.add(1, { ...resultCorrelation, outcome: result.status });
+          } else if (envelope.action === 'record_target_decision') {
+            telemetry.metrics.diligenceDecisions.add(1, { ...resultCorrelation, outcome: result.status });
+          }
           persistState();
           sendJson(response, result.status === 'conflict' ? 409 : 200, result);
         } catch (error) {
+          telemetry.failSpan(portActionSpan, error);
+          portTelemetry.log('ERROR', `Port sponsor request failed: ${error.message}`, {
+            'port.action': envelope.action, 'sponsor.phase': 'result', outcome: 'failure',
+          }, portActionSpan);
           sendJson(response, 409, { error: error.message });
+        } finally {
+          portActionSpan.end();
         }
         return;
       }
@@ -656,9 +701,14 @@ export function createApp({
         }
         latestDiligenceWorkflow = createDiligenceWorkflow(selectedRun);
         diligenceWorkflows.set(selectedRun.runId, latestDiligenceWorkflow);
+        const workflowTelemetry = telemetry.bindCorrelation({
+          ...latestDiligenceWorkflow.correlation,
+          runId: latestDiligenceWorkflow.runId,
+          workflowId: latestDiligenceWorkflow.id,
+        });
         requestSpan.setAttribute('workflow.id', latestDiligenceWorkflow.id);
         requestSpan.setAttribute('run.id', latestDiligenceWorkflow.runId);
-        telemetry.log('INFO', 'Diligence workflow created', {
+        workflowTelemetry.log('INFO', 'Diligence workflow created', {
           'workflow.id': latestDiligenceWorkflow.id,
           'run.id': latestDiligenceWorkflow.runId,
           'workflow.status': latestDiligenceWorkflow.status,
@@ -683,15 +733,23 @@ export function createApp({
           finding: body.finding,
         });
         diligenceWorkflows.set(latestDiligenceWorkflow.runId, latestDiligenceWorkflow);
+        const taskTelemetry = telemetry.bindCorrelation({
+          ...latestDiligenceWorkflow.correlation,
+          runId: latestDiligenceWorkflow.runId,
+          workflowId: latestDiligenceWorkflow.id,
+          diligenceTaskId: decodeURIComponent(diligenceTaskMatch[1]),
+          axis: latestDiligenceWorkflow.tasks.find((item) => item.id === decodeURIComponent(diligenceTaskMatch[1]))?.axis,
+        });
         requestSpan.setAttribute('workflow.id', latestDiligenceWorkflow.id);
         requestSpan.setAttribute('diligence.task.id', decodeURIComponent(diligenceTaskMatch[1]));
-        telemetry.log('INFO', 'Diligence task completed', {
+        taskTelemetry.log('INFO', 'Diligence task completed', {
           'workflow.id': latestDiligenceWorkflow.id,
           'run.id': latestDiligenceWorkflow.runId,
           'diligence.task.id': decodeURIComponent(diligenceTaskMatch[1]),
           'workflow.status': latestDiligenceWorkflow.status,
           actor: body.actor,
         }, requestSpan);
+        telemetry.metrics.diligenceTasks.add(1, taskTelemetry.attributes({ outcome: 'completed' }));
         persistState();
         sendJson(response, 200, latestDiligenceWorkflow);
         return;
@@ -706,15 +764,24 @@ export function createApp({
         }
         latestDiligenceWorkflow = recordDiligenceDecision(selectedWorkflow, body);
         diligenceWorkflows.set(latestDiligenceWorkflow.runId, latestDiligenceWorkflow);
+        const decisionId = `decision-${latestDiligenceWorkflow.runId}`;
+        const decisionTelemetry = telemetry.bindCorrelation({
+          ...latestDiligenceWorkflow.correlation,
+          runId: latestDiligenceWorkflow.runId,
+          workflowId: latestDiligenceWorkflow.id,
+          diligenceDecisionId: decisionId,
+        });
         requestSpan.setAttribute('workflow.id', latestDiligenceWorkflow.id);
         requestSpan.setAttribute('diligence.decision', latestDiligenceWorkflow.decision.decision);
-        telemetry.log('INFO', 'Diligence decision recorded', {
+        requestSpan.setAttribute('diligence.decision.id', decisionId);
+        decisionTelemetry.log('INFO', 'Diligence decision recorded', {
           'workflow.id': latestDiligenceWorkflow.id,
           'run.id': latestDiligenceWorkflow.runId,
           'workflow.status': latestDiligenceWorkflow.status,
           decision: latestDiligenceWorkflow.decision.decision,
           actor: latestDiligenceWorkflow.decision.actor,
         }, requestSpan);
+        telemetry.metrics.diligenceDecisions.add(1, decisionTelemetry.attributes({ outcome: latestDiligenceWorkflow.decision.decision }));
         persistState();
         sendJson(response, 200, latestDiligenceWorkflow);
         return;

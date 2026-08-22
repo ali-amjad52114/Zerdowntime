@@ -107,6 +107,12 @@ export function createDiligenceWorkflow(run, options = {}) {
   return {
     id: options.id ?? randomUUID(),
     runId: run.runId,
+    correlation: {
+      'disease.run.id': run.disease_run_id ?? null,
+      'candidate.id': run.candidate_id ?? null,
+      'target.run.id': run.runId,
+      'target.name': run.target ?? null,
+    },
     factoryVersion: run.factoryVersion,
     createdAt,
     updatedAt: createdAt,
