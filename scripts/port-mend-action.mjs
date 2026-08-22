@@ -32,9 +32,26 @@ if (live) {
     body: JSON.stringify(envelope)
   });
   const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(`Mend Port action failed (HTTP ${response.status}): ${result.message ?? "no JSON error"}`);
+  if (!response.ok) throw new Error(`Mend Port action failed (HTTP ${response.status}): ${result.error ?? result.message ?? "no JSON error"}`);
   validateMendPortResult(result, envelope);
-  artifact = { mode: "live", envelope, result };
+  artifact = {
+    mode: "live",
+    request: {
+      method: "POST",
+      path: url.pathname,
+      port_run_id: envelope.port_run_id,
+      mend_request_id: response.headers.get("x-request-id") ?? response.headers.get("request-id") ?? null,
+      http_status: response.status,
+    },
+    dispatch: {
+      github_run_id: process.env.GITHUB_RUN_ID ?? null,
+      github_run_url: process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY && process.env.GITHUB_RUN_ID
+        ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+        : null,
+    },
+    envelope,
+    result,
+  };
 }
 mkdirSync(dirname(output), { recursive: true });
 writeFileSync(output, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");

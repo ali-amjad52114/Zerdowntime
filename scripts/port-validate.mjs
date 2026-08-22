@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { validatePortEntity } from "./lib/port-catalog.mjs";
 
 const root = "port";
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
@@ -27,6 +28,11 @@ for (const blueprint of blueprints.values()) {
 }
 
 function validateEntity(entity, blueprint, source) {
+  try {
+    validatePortEntity(entity, blueprint, { source: `${source}:${entity?.identifier ?? 'unknown'}` });
+  } catch (error) {
+    errors.push(error.message);
+  }
   if (!entity.identifier || typeof entity.properties !== "object") errors.push(`Invalid entity in ${source}`);
   for (const required of blueprint.schema.required ?? []) {
     if (entity.properties[required] === undefined) errors.push(`${source}:${entity.identifier} omits required property '${required}'`);
@@ -79,6 +85,13 @@ for (const entry of manifest.examples ?? []) {
 }
 
 const actionIds = new Set();
+const mendActionOperations = {
+  mend_handoff_candidate: "handoff_candidate",
+  mend_retry_axis: "retry_axis",
+  mend_approve_source_healing: "approve_source_healing",
+  mend_complete_diligence_task: "complete_diligence_task",
+  mend_record_target_decision: "record_target_decision",
+};
 for (const relative of manifest.actions ?? []) {
   const path = join(root, relative);
   if (!existsSync(path)) { errors.push(`Missing action file: ${path}`); continue; }
@@ -103,6 +116,19 @@ for (const relative of manifest.actions ?? []) {
     for (const required of ["operation", "port_run_id", "entity_id", "parent_id", "actor", "payload_json"]) {
       if (!inputs[required]) errors.push(`${action.identifier} omits workflow input '${required}'`);
     }
+    if (inputs.operation !== mendActionOperations[action.identifier]) errors.push(`${action.identifier} dispatches the wrong Mend operation.`);
+    if (!String(inputs.payload_json ?? "").includes('"expected_status"') && action.identifier !== "mend_handoff_candidate") {
+      errors.push(`${action.identifier} omits its state precondition.`);
+    }
+    if (["mend_retry_axis", "mend_approve_source_healing"].includes(action.identifier) && !String(inputs.payload_json).includes('"axis"')) {
+      errors.push(`${action.identifier} must dispatch an explicit axis.`);
+    }
+    const userInputs = action.trigger?.userInputs ?? {};
+    for (const required of userInputs.required ?? []) {
+      if (!userInputs.properties?.[required]) errors.push(`${action.identifier} requires undefined user input '${required}'.`);
+    }
+    const execution = invocation.integrationActionExecutionProperties ?? {};
+    if (execution.org !== "ali-amjad52114" || execution.repo !== "Zerdowntime") errors.push(`${action.identifier} has unresolved GitHub dispatch coordinates.`);
   }
 }
 

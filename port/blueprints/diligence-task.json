@@ -11,7 +11,7 @@
       "assignee": { "title": "Assignee", "type": "string" },
       "finding": { "title": "Finding", "type": "string" },
       "outcome": { "title": "Outcome", "type": "string", "enum": ["supports", "contradicts", "inconclusive", "escalate"] },
-      "evidence_ids": { "title": "Evidence IDs", "type": "array", "items": { "type": "string" } },
+      "evidence_ids": { "title": "Evidence IDs", "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
       "completed_by": { "title": "Completed by", "type": "string" },
       "completed_at": { "title": "Completed at", "type": "string", "format": "date-time" },
       "contract_version": { "title": "Contract version", "type": "string" }

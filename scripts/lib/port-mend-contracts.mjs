@@ -1,4 +1,14 @@
+import { loadPortCatalog, validatePortEntityEntry } from "./port-catalog.mjs";
+
 export const MEND_PORT_CONTRACT_VERSION = "mend.port-control/v1";
+
+export const ACTION_RESULT_BLUEPRINTS = Object.freeze({
+  handoff_candidate: ["mendDiseaseRun", "mendCandidateTarget", "mendTargetRun", "mendAxisRun", "mendDiligenceTask"],
+  retry_axis: ["mendTargetRun", "mendAxisRun", "mendDiligenceTask"],
+  approve_source_healing: ["mendAxisRun"],
+  complete_diligence_task: ["mendDiligenceTask", "mendTargetRun"],
+  record_target_decision: ["mendTargetRun", "mendTargetDecision"]
+});
 
 export const ACTION_CONTRACTS = Object.freeze({
   handoff_candidate: {
@@ -19,13 +29,13 @@ export const ACTION_CONTRACTS = Object.freeze({
     required: ["axis", "reason", "expected_status", "expected_retry_count"],
     validate(payload) {
       if (!["X", "Y", "Z"].includes(payload.axis)) throw new Error("retry_axis.axis must be X, Y, or Z.");
-      if (payload.expected_status !== "failed") throw new Error("retry_axis requires expected_status=failed.");
+      if (!["failed", "retry_pending"].includes(payload.expected_status)) throw new Error("retry_axis requires expected_status=failed or retry_pending.");
       if (!Number.isInteger(payload.expected_retry_count) || payload.expected_retry_count < 0) throw new Error("retry_axis.expected_retry_count must be a non-negative integer.");
     }
   },
   approve_source_healing: {
     resourceType: "axis_run",
-    required: ["source_execution_id", "healing_request_id", "reason", "evidence_url", "expected_status"],
+    required: ["axis", "source_execution_id", "healing_request_id", "reason", "evidence_url", "expected_status"],
     validate(payload) {
       if (!["X", "Y", "Z"].includes(payload.axis)) throw new Error("approve_source_healing requires axis X, Y, or Z.");
       if (payload.expected_status !== "healing_pending") throw new Error("approve_source_healing requires expected_status=healing_pending.");
@@ -58,6 +68,12 @@ function requiredString(value, name) {
   return value.trim();
 }
 
+function requireNonEmptyStrings(values, name) {
+  if (!Array.isArray(values) || values.length === 0 || values.some((value) => typeof value !== "string" || !value.trim())) {
+    throw new Error(`${name} must be a non-empty string array.`);
+  }
+}
+
 function assertHttpUrl(value, name) {
   requiredString(value, name);
   const url = new URL(value);
@@ -74,6 +90,13 @@ export function buildMendPortEnvelope({ action, portRunId, entityId, parentId, a
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("payload must be an object.");
   for (const field of contract.required) {
     if (payload[field] === undefined || payload[field] === null || payload[field] === "") throw new Error(`${action}.${field} is required.`);
+  }
+  for (const field of ["reason", "selection_reason", "finding", "rationale", "source_execution_id", "healing_request_id"]) {
+    if (payload[field] !== undefined) requiredString(payload[field], `${action}.${field}`);
+  }
+  if (payload.evidence_ids !== undefined) requireNonEmptyStrings(payload.evidence_ids, `${action}.evidence_ids`);
+  if (payload.open_risks !== undefined && (!Array.isArray(payload.open_risks) || payload.open_risks.some((value) => typeof value !== "string" || !value.trim()))) {
+    throw new Error(`${action}.open_risks must be a string array.`);
   }
   contract.validate(payload);
   const correlation = { "port.run.id": portRunId };
@@ -104,13 +127,19 @@ export function validateMendPortResult(result, envelope) {
   if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("Mend action result must be an object.");
   if (result.contract_version !== MEND_PORT_CONTRACT_VERSION) throw new Error("Mend action result contract_version does not match.");
   if (result.port_run_id !== envelope.port_run_id) throw new Error("Mend action result port_run_id does not match.");
+  if (result.action !== envelope.action) throw new Error("Mend action result action does not match.");
   requiredString(result.action_execution_id, "result.action_execution_id");
   if (!["accepted", "completed", "rejected", "conflict"].includes(result.status)) throw new Error("Mend action result status is invalid.");
   if (!Array.isArray(result.port_entities)) throw new Error("Mend action result port_entities must be an array.");
+  const catalog = loadPortCatalog();
   for (const [index, entry] of result.port_entities.entries()) {
     requiredString(entry?.blueprint, `result.port_entities[${index}].blueprint`);
     requiredString(entry?.entity?.identifier, `result.port_entities[${index}].entity.identifier`);
     if (!entry.entity.properties || typeof entry.entity.properties !== "object") throw new Error(`result.port_entities[${index}].entity.properties must be an object.`);
+    validatePortEntityEntry(entry, catalog, {
+      allowedBlueprints: ACTION_RESULT_BLUEPRINTS[envelope.action],
+      source: `result.port_entities[${index}]`
+    });
   }
   return result;
 }

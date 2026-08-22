@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
-import { buildMendPortEnvelope, MEND_PORT_CONTRACT_VERSION } from '../../scripts/lib/port-mend-contracts.mjs';
+import { buildMendPortEnvelope, MEND_PORT_CONTRACT_VERSION, validateMendPortResult } from '../../scripts/lib/port-mend-contracts.mjs';
+
+const pendingByExecutionStore = new WeakMap();
 
 function fingerprint(value) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -17,7 +19,8 @@ export function validateInboundPortEnvelope(envelope, idempotencyKey) {
     payload: envelope.input,
     requestedAt: envelope.requested_at,
   });
-  if (rebuilt.resource.type !== envelope.resource?.type) throw new Error('Port resource type does not match action');
+  if (JSON.stringify(rebuilt.resource) !== JSON.stringify(envelope.resource)) throw new Error('Port resource does not match action');
+  if (JSON.stringify(rebuilt.correlation) !== JSON.stringify(envelope.correlation)) throw new Error('Port correlation does not match action resource');
   return envelope;
 }
 
@@ -30,29 +33,63 @@ export async function executePortAction({ envelope, idempotencyKey, actions, exe
       return {
         contract_version: MEND_PORT_CONTRACT_VERSION,
         port_run_id: envelope.port_run_id,
+        action: envelope.action,
         action_execution_id: prior.result.action_execution_id,
         status: 'conflict',
         message: 'idempotency key was already used for a different request',
+        correlation: envelope.correlation,
         port_entities: [],
       };
     }
     return prior.result;
   }
+  let pending = pendingByExecutionStore.get(executions);
+  if (!pending) {
+    pending = new Map();
+    pendingByExecutionStore.set(executions, pending);
+  }
+  const inFlight = pending.get(idempotencyKey);
+  if (inFlight) {
+    if (inFlight.requestFingerprint !== requestFingerprint) {
+      return {
+        contract_version: MEND_PORT_CONTRACT_VERSION,
+        port_run_id: envelope.port_run_id,
+        action: envelope.action,
+        action_execution_id: `mend-${envelope.port_run_id}`,
+        status: 'conflict',
+        message: 'idempotency key is in use for a different request',
+        correlation: envelope.correlation,
+        port_entities: [],
+      };
+    }
+    return inFlight.promise;
+  }
   const handler = actions?.[envelope.action];
   if (typeof handler !== 'function') throw new Error(`Port action ${envelope.action} is not implemented`);
-  const output = await handler(envelope);
-  const result = {
-    contract_version: MEND_PORT_CONTRACT_VERSION,
-    port_run_id: envelope.port_run_id,
-    action_execution_id: `mend-${envelope.port_run_id}`,
-    status: output?.status ?? 'completed',
-    message: output?.message ?? null,
-    port_entities: output?.port_entities ?? [],
-  };
-  executions.set(idempotencyKey, { requestFingerprint, result });
-  return result;
+  const promise = (async () => {
+    const output = await handler(envelope);
+    const result = {
+      contract_version: MEND_PORT_CONTRACT_VERSION,
+      port_run_id: envelope.port_run_id,
+      action: envelope.action,
+      action_execution_id: `mend-${envelope.port_run_id}`,
+      status: output?.status ?? 'completed',
+      message: output?.message ?? null,
+      correlation: envelope.correlation,
+      port_entities: output?.port_entities ?? [],
+    };
+    validateMendPortResult(result, envelope);
+    executions.set(idempotencyKey, { requestFingerprint, result });
+    return result;
+  })();
+  pending.set(idempotencyKey, { requestFingerprint, promise });
+  try {
+    return await promise;
+  } finally {
+    pending.delete(idempotencyKey);
+  }
 }
 
-export function portEntity(blueprint, identifier, properties, relations = {}) {
-  return { blueprint, entity: { identifier, title: properties.title ?? identifier, properties, relations } };
+export function portEntity(blueprint, identifier, properties, relations = {}, title = properties.title ?? identifier) {
+  return { blueprint, entity: { identifier, title, properties, relations } };
 }

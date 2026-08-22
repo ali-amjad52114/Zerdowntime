@@ -9,8 +9,11 @@
       "status": { "title": "Status", "type": "string", "enum": ["queued", "running", "succeeded", "failed", "retry_pending", "healing_pending", "unavailable"] },
       "provider": { "title": "Provider", "type": "string" },
       "source_execution_id": { "title": "Source execution ID", "type": "string" },
+      "healing_request_id": { "title": "Healing request ID", "type": "string" },
       "retry_count": { "title": "Retry count", "type": "number" },
       "max_retries": { "title": "Maximum retries", "type": "number" },
+      "retry_history": { "title": "Retry history", "type": "array", "items": { "type": "object" } },
+      "last_retry_port_run_id": { "title": "Last retry Port run ID", "type": "string" },
       "failure_code": { "title": "Failure code", "type": "string" },
       "failure_message": { "title": "Failure message", "type": "string" },
       "record_count": { "title": "Record count", "type": "number" },
@@ -19,7 +22,7 @@
       "updated_at": { "title": "Updated at", "type": "string", "format": "date-time" },
       "contract_version": { "title": "Contract version", "type": "string" }
     },
-    "required": ["axis", "status", "provider", "retry_count", "max_retries", "record_count", "validation_status", "updated_at", "contract_version"]
+    "required": ["axis", "status", "provider", "retry_count", "max_retries", "retry_history", "record_count", "validation_status", "updated_at", "contract_version"]
   },
   "mirrorProperties": {}, "calculationProperties": {}, "aggregationProperties": {},
   "relations": { "target_run": { "title": "Target run", "target": "mendTargetRun", "required": true, "many": false } }

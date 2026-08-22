@@ -11,7 +11,7 @@
       "ranking_score": { "title": "Ranking score", "type": "number" },
       "supporting_evidence_count": { "title": "Supporting evidence", "type": "number" },
       "contradictory_evidence_count": { "title": "Contradictory evidence", "type": "number" },
-      "evidence_ids": { "title": "Evidence IDs", "type": "array", "items": { "type": "string" } },
+      "evidence_ids": { "title": "Evidence IDs", "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
       "selection_status": { "title": "Selection status", "type": "string", "enum": ["pending", "selected", "rejected", "handed_off"] },
       "selected_by": { "title": "Selected by", "type": "string" },
       "selected_at": { "title": "Selected at", "type": "string", "format": "date-time" },

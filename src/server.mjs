@@ -133,6 +133,7 @@ export function createApp({
   corpusDiscovery = discoverDiseaseCorpus,
   candidateDiscovery = discoverTargets,
   targetDiligence = runSelectedTargetDiligence,
+  targetAxisRetry = retrySelectedTargetAxis,
   targetAnalyze = analyzeTarget,
   compoundDiscovery = retrieveKnownTargetCompounds,
   fetchImpl,
@@ -174,37 +175,150 @@ export function createApp({
     });
   }
 
-  function portAxisEntity(run, axis, retryCount = 0) {
-    const outcome = run.axes?.[axis] ?? {};
-    const provider = axis === 'X' ? 'ClinicalTrials.gov' : axis === 'Y' ? 'RCSB PDB' : 'EPO Linked Open Data';
-    return portEntity('mendAxisRun', `${run.runId}:${axis}`, {
-      title: `${run.target} ${axis}`,
-      axis,
-      status: outcome.validation?.status === 'PASS' ? 'succeeded' : 'failed',
-      provider,
-      retry_count: retryCount,
-      max_retries: 2,
-      record_count: outcome.records?.length ?? 0,
-      validation_status: String(outcome.validation?.status ?? 'pending').toLowerCase(),
-      failure_message: outcome.validation?.reason ?? null,
-      updated_at: new Date().toISOString(),
-      contract_version: 'mend.port-control/v1',
-    }, { target_run: run.runId });
+  function axisSourceExecutionId(outcome = {}) {
+    return outcome.source_execution_id
+      ?? outcome.summary?.source_execution_id
+      ?? outcome.summary?.brightdata_source_execution_id
+      ?? outcome.sub_axes?.company_pipeline?.source_execution?.execution_id
+      ?? null;
   }
 
-  function portTargetEntity(run, requestedAxes = ['X', 'Y', 'Z']) {
+  function initializeHealingRequest(run, axis, attempt = 0) {
+    const outcome = run.axes?.[axis];
+    const sourceExecutionId = axisSourceExecutionId(outcome);
+    if (outcome?.validation?.status !== 'FAIL' || !sourceExecutionId) return run;
+    const existing = run.healing_requests?.[axis];
+    if (existing?.source_execution_id === sourceExecutionId && existing?.status === 'pending') return run;
+    return {
+      ...run,
+      healing_requests: {
+        ...(run.healing_requests ?? {}),
+        [axis]: {
+          id: `${run.runId}:${axis}:healing:${attempt}`,
+          axis,
+          source_execution_id: sourceExecutionId,
+          status: 'pending',
+          requested_at: new Date().toISOString(),
+        },
+      },
+    };
+  }
+
+  function portAxisEntity(run, axis, retryCount = Number(run.retry_counts?.[axis] ?? 0)) {
+    const outcome = run.axes?.[axis] ?? {};
+    const provider = axis === 'X' ? 'ClinicalTrials.gov' : axis === 'Y' ? 'RCSB PDB' : 'EPO Linked Open Data';
+    const healingRequest = run.healing_requests?.[axis];
+    const retryHistory = run.retry_history?.[axis] ?? [];
+    const status = healingRequest?.status === 'pending'
+      ? 'healing_pending'
+      : healingRequest?.status === 'approved'
+        ? 'retry_pending'
+        : outcome.validation?.status === 'PASS' ? 'succeeded' : 'failed';
+    return portEntity('mendAxisRun', `${run.runId}:${axis}`, {
+      axis,
+      status,
+      provider,
+      ...(axisSourceExecutionId(outcome) ? { source_execution_id: axisSourceExecutionId(outcome) } : {}),
+      ...(healingRequest?.id ? { healing_request_id: healingRequest.id } : {}),
+      retry_count: retryCount,
+      max_retries: 2,
+      retry_history: retryHistory,
+      ...(retryHistory.at(-1)?.port_run_id ? { last_retry_port_run_id: retryHistory.at(-1).port_run_id } : {}),
+      record_count: outcome.records?.length ?? 0,
+      validation_status: String(outcome.validation?.status ?? 'pending').toLowerCase(),
+      ...(outcome.validation?.reason ? { failure_message: outcome.validation.reason } : {}),
+      updated_at: new Date().toISOString(),
+      contract_version: 'mend.port-control/v1',
+    }, { target_run: run.runId }, `${run.target} ${axis}`);
+  }
+
+  function portTargetEntity(run, requestedAxes = ['X', 'Y', 'Z'], statusOverride) {
     const now = new Date().toISOString();
     return portEntity('mendTargetRun', run.runId, {
-      title: run.target,
       target_name: run.target,
       canonical_symbol: run.target,
-      status: run.status === 'HEALTHY' ? 'review' : run.status === 'DEGRADED' ? 'partial_failure' : 'failed',
+      ...(run.axes?.Y?.summary?.uniprot_id ? { uniprot_id: run.axes.Y.summary.uniprot_id } : {}),
+      status: statusOverride ?? (run.status === 'HEALTHY' ? 'review' : run.status === 'DEGRADED' ? 'partial_failure' : 'failed'),
       requested_axes: requestedAxes,
       created_at: run.created_at ?? now,
       updated_at: now,
       correlation_id: run.runId,
       contract_version: 'mend.port-control/v1',
-    }, { disease_run: run.disease_run_id, candidate: run.candidate_id });
+    }, { disease_run: run.disease_run_id, candidate: run.candidate_id }, run.target);
+  }
+
+  function candidateEvidenceIds(candidate) {
+    const passages = [...(candidate.supporting_passages ?? []), ...(candidate.contradictory_passages ?? []), ...(candidate.evidence ?? [])];
+    return [...new Set(passages.map((item) => item.evidence_id ?? item.passage_id ?? item.paper_id ?? item.source_id ?? item.source_url).filter(Boolean).map(String))];
+  }
+
+  function portCandidateEntity(candidate, actor, selectionReason) {
+    const evidenceIds = candidateEvidenceIds(candidate);
+    const supportingCount = candidate.evidence?.filter((item) => item.classification === 'SUPPORTING').length
+      ?? candidate.supporting_passages?.length ?? 0;
+    const contradictoryCount = candidate.evidence?.filter((item) => item.classification === 'CONTRADICTORY').length
+      ?? candidate.contradictory_passages?.length ?? 0;
+    return portEntity('mendCandidateTarget', candidate.candidate_id, {
+      display_name: candidate.name,
+      ...(candidate.canonical_symbol ? { canonical_symbol: candidate.canonical_symbol } : {}),
+      ...(candidate.uniprot_id ? { uniprot_id: candidate.uniprot_id } : {}),
+      ranking_score: Number(candidate.score ?? candidate.ranking?.score ?? 0),
+      supporting_evidence_count: Number(supportingCount),
+      contradictory_evidence_count: Number(contradictoryCount),
+      evidence_ids: evidenceIds,
+      selection_status: 'handed_off',
+      selected_by: actor,
+      selected_at: new Date().toISOString(),
+      contract_version: 'mend.port-control/v1',
+    }, { disease_run: discoveryState.run_id }, candidate.name);
+  }
+
+  function portDiseaseEntity(status) {
+    const resources = discoveryState.corpus?.resources ?? [];
+    const sourceExecutionIds = [...new Set([
+      ...(discoveryState.corpus?.source_execution_ids ?? []),
+      ...resources.map((resource) => resource.source_execution_id).filter(Boolean),
+    ].map(String))];
+    const createdAt = discoveryState.created_at ?? new Date().toISOString();
+    return portEntity('mendDiseaseRun', discoveryState.run_id, {
+      disease: discoveryState.disease,
+      status,
+      corpus_document_count: resources.length,
+      candidate_count: discoveryState.candidates.length,
+      source_execution_ids: sourceExecutionIds,
+      created_at: createdAt,
+      updated_at: new Date().toISOString(),
+      contract_version: 'mend.port-control/v1',
+    }, { project: 'zero-downtime-factory' }, discoveryState.disease);
+  }
+
+  function taskEvidenceIds(task) {
+    return [...new Set((task.evidence ?? []).map((item) => item.evidence_id ?? item.id ?? item.source_url).filter(Boolean).map(String))];
+  }
+
+  function portTaskEntity(runId, task) {
+    const taskTypes = { X: 'competitive_program', Y: 'structural_opportunity', Z: 'patent_triage' };
+    return portEntity('mendDiligenceTask', `${runId}:${task.id}`, {
+      task_type: taskTypes[task.axis] ?? 'contradiction_review',
+      title: task.title,
+      status: task.status === 'COMPLETE' ? 'completed' : 'open',
+      evidence_ids: taskEvidenceIds(task),
+      ...(task.completion?.finding ? { finding: task.completion.finding } : {}),
+      ...(task.completion?.outcome ? { outcome: task.completion.outcome } : {}),
+      ...(task.completion?.actor ? { completed_by: task.completion.actor } : {}),
+      ...(task.completion?.completedAt ? { completed_at: task.completion.completedAt } : {}),
+      contract_version: 'mend.port-control/v1',
+    }, { target_run: runId }, task.title);
+  }
+
+  function ensureDiligenceWorkflow(run) {
+    let workflow = diligenceWorkflows.get(run.runId);
+    if (!workflow && run.status === 'HEALTHY' && run.publishStatus === 'PUBLISHED') {
+      workflow = createDiligenceWorkflow(run);
+      diligenceWorkflows.set(run.runId, workflow);
+      latestDiligenceWorkflow = workflow;
+    }
+    return workflow;
   }
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
@@ -263,13 +377,15 @@ export function createApp({
               telemetry,
               parentSpan: requestSpan,
             });
-            const bound = bindTargetRun(run, {
+            let bound = bindTargetRun(run, {
               disease: discoveryState.disease,
               diseaseRunId: discoveryState.run_id,
               candidate,
             });
+            for (const axis of requestedAxes) bound = initializeHealingRequest(bound, axis);
             targetRuns.set(bound.runId, bound);
             latestMendRun = bound;
+            const workflow = ensureDiligenceWorkflow(bound);
             const selected = [...new Set([...(discoveryState.selection.selected_candidate_ids ?? []), candidate.candidate_id])];
             const results = [...discoveryState.handoff.results, { candidate_id: candidate.candidate_id, target: candidate.name, run: bound }];
             discoveryState = {
@@ -283,33 +399,74 @@ export function createApp({
               },
             };
             persistState();
-            return { port_entities: [portTargetEntity(bound, requestedAxes), ...requestedAxes.map((axis) => portAxisEntity(bound, axis))] };
+            const diseaseStatus = bound.status === 'HEALTHY' ? 'handed_off' : 'partial_failure';
+            return { port_entities: [
+              portDiseaseEntity(diseaseStatus),
+              portCandidateEntity(candidate, action.actor, action.input.selection_reason),
+              portTargetEntity(bound, requestedAxes),
+              ...requestedAxes.map((axis) => portAxisEntity(bound, axis)),
+              ...(workflow?.tasks ?? []).map((task) => portTaskEntity(bound.runId, task)),
+            ] };
           },
           retry_axis: async (action) => {
             const run = targetRuns.get(action.resource.parent_id);
             if (!run) throw new Error('unknown target run for Port axis retry');
             const axis = action.input.axis;
+            if (action.resource.id !== `${run.runId}:${axis}`) throw new Error('Port axis resource does not match its target run and explicit axis');
             const current = run.axes?.[axis];
             if (current?.validation?.status !== 'FAIL') throw new Error('only a failed axis can be retried');
+            const healingRequest = run.healing_requests?.[axis];
+            if (healingRequest?.status === 'pending') throw new Error('pending source healing requires Port approval before retry');
+            const currentPortStatus = healingRequest?.status === 'approved' ? 'retry_pending' : 'failed';
+            if (action.input.expected_status !== currentPortStatus) throw new Error('axis retry status changed');
             const retryCount = Number(run.retry_counts?.[axis] ?? 0);
             if (retryCount !== action.input.expected_retry_count) throw new Error('axis retry count changed');
             if (retryCount >= 2) throw new Error('axis retry budget exhausted');
-            const retried = await retrySelectedTargetAxis({
+            let retried = await targetAxisRetry({
               axis, existingRun: run, disease: run.disease ?? discoveryState.disease, target: run.target,
               fetchImpl, telemetry, parentSpan: requestSpan,
             });
             retried.retry_counts = { ...(run.retry_counts ?? {}), [axis]: retryCount + 1 };
+            const retryEvent = {
+              attempt: retryCount + 1,
+              port_run_id: action.port_run_id,
+              actor: action.actor,
+              reason: action.input.reason,
+              status: retried.axes?.[axis]?.validation?.status === 'PASS' ? 'succeeded' : 'failed',
+              completed_at: new Date().toISOString(),
+            };
+            retried.retry_history = {
+              ...(run.retry_history ?? {}),
+              [axis]: [...(run.retry_history?.[axis] ?? []), retryEvent],
+            };
+            retried.healing_requests = { ...(run.healing_requests ?? {}) };
+            if (retried.axes?.[axis]?.validation?.status === 'PASS') delete retried.healing_requests[axis];
+            else retried = initializeHealingRequest(retried, axis, retryCount + 1);
             targetRuns.set(run.runId, retried);
             if (latestMendRun?.runId === run.runId) latestMendRun = retried;
+            const workflow = ensureDiligenceWorkflow(retried);
             discoveryState = {
               ...discoveryState,
               handoff: { ...discoveryState.handoff, results: discoveryState.handoff.results.map((item) => item.run?.runId === run.runId ? { ...item, run: retried } : item) },
             };
             persistState();
-            return { port_entities: [portTargetEntity(retried), portAxisEntity(retried, axis, retryCount + 1)] };
+            return { port_entities: [
+              portTargetEntity(retried),
+              portAxisEntity(retried, axis, retryCount + 1),
+              ...(workflow?.tasks ?? []).map((task) => portTaskEntity(retried.runId, task)),
+            ] };
           },
           approve_source_healing: async (action) => {
+            const run = targetRuns.get(action.resource.parent_id);
+            if (!run) throw new Error('unknown target run for Port source-healing approval');
+            const axis = action.input.axis;
+            if (action.resource.id !== `${run.runId}:${axis}`) throw new Error('Port axis resource does not match its target run and explicit axis');
+            const request = run.healing_requests?.[axis];
+            if (!request || request.status !== 'pending') throw new Error('axis does not have a pending source-healing request');
+            if (request.id !== action.input.healing_request_id) throw new Error('source-healing request ID does not match the pending axis request');
+            if (request.source_execution_id !== action.input.source_execution_id) throw new Error('source execution ID does not match the pending axis request');
             const approval = {
+              axis,
               source_execution_id: action.input.source_execution_id,
               healing_request_id: action.input.healing_request_id,
               actor: action.actor,
@@ -319,33 +476,43 @@ export function createApp({
               port_run_id: action.port_run_id,
             };
             sourceHealingApprovals.set(action.input.healing_request_id, approval);
+            run.healing_requests = {
+              ...(run.healing_requests ?? {}),
+              [axis]: { ...request, status: 'approved', approval },
+            };
+            targetRuns.set(run.runId, run);
             persistState();
-            return { port_entities: [portEntity('mendAxisRun', action.resource.id, {
-              title: action.resource.id,
-              axis: action.input.axis ?? 'X', status: 'retry_pending', provider: 'Bright Data',
-              source_execution_id: action.input.source_execution_id, retry_count: 0, max_retries: 2,
-              record_count: 0, validation_status: 'pending', evidence_url: action.input.evidence_url,
-              updated_at: approval.approved_at, contract_version: 'mend.port-control/v1',
-            }, { target_run: action.resource.parent_id })] };
+            const entity = portAxisEntity(run, axis);
+            entity.entity.properties.evidence_url = action.input.evidence_url;
+            entity.entity.properties.updated_at = approval.approved_at;
+            return { port_entities: [entity] };
           },
           complete_diligence_task: async (action) => {
             const workflow = diligenceWorkflows.get(action.resource.parent_id);
             if (!workflow) throw new Error('unknown target diligence workflow');
-            const updated = completeDiligenceTask(workflow, { taskId: action.resource.id, actor: action.actor, finding: action.input.finding });
+            const task = workflow.tasks.find((item) => `${workflow.runId}:${item.id}` === action.resource.id);
+            if (!task) throw new Error('Port task does not belong to the target diligence workflow');
+            if (task.status !== 'OPEN') throw new Error('only an open diligence task can be completed');
+            const allowedEvidence = new Set(taskEvidenceIds(task));
+            if (action.input.evidence_ids.some((id) => !allowedEvidence.has(id))) throw new Error('task completion references evidence outside the task');
+            let updated = completeDiligenceTask(workflow, { taskId: task.id, actor: action.actor, finding: action.input.finding });
+            updated = {
+              ...updated,
+              tasks: updated.tasks.map((item) => item.id === task.id
+                ? { ...item, completion: { ...item.completion, outcome: action.input.outcome, evidence_ids: action.input.evidence_ids } }
+                : item),
+            };
             diligenceWorkflows.set(updated.runId, updated);
             latestDiligenceWorkflow = updated;
-            const task = updated.tasks.find((item) => item.id === action.resource.id);
+            const completedTask = updated.tasks.find((item) => item.id === task.id);
             persistState();
-            return { port_entities: [portEntity('mendDiligenceTask', task.id, {
-              title: task.title, task_type: task.axis === 'X' ? 'competitive_program' : task.axis === 'Y' ? 'structural_opportunity' : 'patent_triage',
-              status: 'completed', evidence_ids: action.input.evidence_ids, finding: action.input.finding,
-              outcome: action.input.outcome, completed_by: action.actor, completed_at: task.completion.completedAt,
-              contract_version: 'mend.port-control/v1',
-            }, { target_run: updated.runId })] };
+            return { port_entities: [portTaskEntity(updated.runId, completedTask), portTargetEntity(targetRuns.get(updated.runId))] };
           },
           record_target_decision: async (action) => {
             const workflow = diligenceWorkflows.get(action.resource.id);
             if (!workflow) throw new Error('unknown target diligence workflow');
+            const run = targetRuns.get(action.resource.id);
+            if (!run || run.disease_run_id !== action.resource.parent_id) throw new Error('target decision ownership does not match the disease run');
             const decisionMap = { proceed: 'PROCEED_TO_FOCUSED_DILIGENCE', hold: 'HOLD', escalate: 'ESCALATE' };
             let updated = recordDiligenceDecision(workflow, {
               decision: decisionMap[action.input.decision], actor: action.actor, rationale: action.input.rationale,
@@ -354,11 +521,11 @@ export function createApp({
             diligenceWorkflows.set(updated.runId, updated);
             latestDiligenceWorkflow = updated;
             persistState();
-            return { port_entities: [portEntity('mendTargetDecision', `decision-${updated.runId}`, {
-              title: `${updated.runId} decision`, decision: action.input.decision, actor: action.actor,
+            return { port_entities: [portTargetEntity(run, ['X', 'Y', 'Z'], 'decided'), portEntity('mendTargetDecision', `decision-${updated.runId}`, {
+              decision: action.input.decision, actor: action.actor,
               rationale: action.input.rationale, evidence_ids: action.input.evidence_ids, open_risks: action.input.open_risks,
               recorded_at: updated.decision.decidedAt, contract_version: 'mend.port-control/v1',
-            }, { target_run: updated.runId })] };
+            }, { target_run: updated.runId }, `${run.target} decision`)] };
           },
         };
         try {

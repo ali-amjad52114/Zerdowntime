@@ -9,7 +9,7 @@
       "properties": {
         "decision": { "title": "Decision", "type": "string", "enum": ["proceed", "hold", "escalate"] },
         "rationale": { "title": "Rationale", "type": "string" },
-        "evidence_ids": { "title": "Evidence IDs", "type": "array", "items": { "type": "string" } },
+        "evidence_ids": { "title": "Evidence IDs", "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
         "open_risks": { "title": "Open risks", "type": "array", "items": { "type": "string" } }
       },
       "required": ["decision", "rationale", "evidence_ids", "open_risks"],
@@ -19,7 +19,7 @@
   "invocationMethod": {
     "type": "INTEGRATION_ACTION", "installationId": "github-ocean", "integrationActionType": "dispatch_workflow",
     "integrationActionExecutionProperties": {
-      "org": "REPLACE_WITH_GITHUB_ORG", "repo": "REPLACE_WITH_GITHUB_REPO", "workflow": "port-mend-control.yml",
+      "org": "ali-amjad52114", "repo": "Zerdowntime", "workflow": "port-mend-control.yml",
       "workflowInputs": {
         "operation": "record_target_decision", "port_run_id": "{{ .run.id }}", "entity_id": "{{ .entity.identifier }}",
         "parent_id": "{{ .entity.relations.disease_run }}", "actor": "{{ .run.triggeredBy }}",

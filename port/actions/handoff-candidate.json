@@ -7,8 +7,8 @@
     "type": "self-service", "operation": "DAY-2", "blueprintIdentifier": "mendCandidateTarget",
     "userInputs": {
       "properties": {
-        "axes": { "title": "Axes", "type": "array", "items": { "type": "string", "enum": ["X", "Y", "Z"] }, "default": ["X", "Y", "Z"] },
-        "selection_reason": { "title": "Selection reason", "type": "string" }
+        "axes": { "title": "Axes", "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true, "items": { "type": "string", "enum": ["X", "Y", "Z"] }, "default": ["X", "Y", "Z"] },
+        "selection_reason": { "title": "Selection reason", "type": "string", "minLength": 1 }
       },
       "required": ["axes", "selection_reason"], "order": ["axes", "selection_reason"]
     }
@@ -16,7 +16,7 @@
   "invocationMethod": {
     "type": "INTEGRATION_ACTION", "installationId": "github-ocean", "integrationActionType": "dispatch_workflow",
     "integrationActionExecutionProperties": {
-      "org": "REPLACE_WITH_GITHUB_ORG", "repo": "REPLACE_WITH_GITHUB_REPO", "workflow": "port-mend-control.yml",
+      "org": "ali-amjad52114", "repo": "Zerdowntime", "workflow": "port-mend-control.yml",
       "workflowInputs": {
         "operation": "handoff_candidate", "port_run_id": "{{ .run.id }}", "entity_id": "{{ .entity.identifier }}",
         "parent_id": "{{ .entity.relations.disease_run }}", "actor": "{{ .run.triggeredBy }}",

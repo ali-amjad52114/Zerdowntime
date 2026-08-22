@@ -9,7 +9,7 @@
       "properties": {
         "finding": { "title": "Finding", "type": "string" },
         "outcome": { "title": "Outcome", "type": "string", "enum": ["supports", "contradicts", "inconclusive", "escalate"] },
-        "evidence_ids": { "title": "Evidence IDs", "type": "array", "items": { "type": "string" } }
+        "evidence_ids": { "title": "Evidence IDs", "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } }
       },
       "required": ["finding", "outcome", "evidence_ids"], "order": ["finding", "outcome", "evidence_ids"]
     }
@@ -17,7 +17,7 @@
   "invocationMethod": {
     "type": "INTEGRATION_ACTION", "installationId": "github-ocean", "integrationActionType": "dispatch_workflow",
     "integrationActionExecutionProperties": {
-      "org": "REPLACE_WITH_GITHUB_ORG", "repo": "REPLACE_WITH_GITHUB_REPO", "workflow": "port-mend-control.yml",
+      "org": "ali-amjad52114", "repo": "Zerdowntime", "workflow": "port-mend-control.yml",
       "workflowInputs": {
         "operation": "complete_diligence_task", "port_run_id": "{{ .run.id }}", "entity_id": "{{ .entity.identifier }}",
         "parent_id": "{{ .entity.relations.target_run }}", "actor": "{{ .run.triggeredBy }}",

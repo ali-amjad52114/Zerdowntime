@@ -9,7 +9,7 @@
       "canonical_symbol": { "title": "Canonical symbol", "type": "string" },
       "uniprot_id": { "title": "UniProt ID", "type": "string" },
       "status": { "title": "Status", "type": "string", "enum": ["queued", "running", "review", "partial_failure", "failed", "complete", "decided"] },
-      "requested_axes": { "title": "Requested axes", "type": "array", "items": { "type": "string", "enum": ["X", "Y", "Z"] } },
+      "requested_axes": { "title": "Requested axes", "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true, "items": { "type": "string", "enum": ["X", "Y", "Z"] } },
       "created_at": { "title": "Created at", "type": "string", "format": "date-time" },
       "updated_at": { "title": "Updated at", "type": "string", "format": "date-time" },
       "correlation_id": { "title": "Correlation ID", "type": "string" },

@@ -23,8 +23,8 @@
     "installationId": "github-ocean",
     "integrationActionType": "dispatch_workflow",
     "integrationActionExecutionProperties": {
-      "org": "REPLACE_WITH_GITHUB_ORG",
-      "repo": "REPLACE_WITH_GITHUB_REPO",
+      "org": "ali-amjad52114",
+      "repo": "Zerdowntime",
       "workflow": "port-delivery.yml",
       "workflowInputs": {
         "operation": "prepare",

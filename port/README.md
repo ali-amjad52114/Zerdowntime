@@ -70,7 +70,7 @@ All five dispatch `port-mend-control.yml`. That workflow sends `POST /api/port/a
 Operation-specific `input` contracts are:
 
 - `handoff_candidate`: `axes`, `selection_reason`, `expected_selection_status=pending`.
-- `retry_axis`: `axis`, `reason`, `expected_status=failed`, `expected_retry_count`.
+- `retry_axis`: `axis`, `reason`, current `expected_status` (`failed` or approved `retry_pending`), `expected_retry_count`.
 - `approve_source_healing`: `axis`, `source_execution_id`, `healing_request_id`, `reason`, `evidence_url`, `expected_status=healing_pending`.
 - `complete_diligence_task`: `finding`, `outcome`, nonempty `evidence_ids`, `expected_status=open`.
 - `record_target_decision`: `decision`, `rationale`, nonempty `evidence_ids`, `open_risks`, `expected_status=review`.
@@ -89,7 +89,9 @@ Mend must respond with the same contract and Port run ID, a durable action execu
 }
 ```
 
-The adapter rejects mismatched correlation IDs, invalid state preconditions, invalid evidence payloads, and blueprints outside the controlled manifest. Returned entities are attached to the Port action run during upsert.
+The adapter rejects mismatched correlation IDs, invalid state preconditions, invalid evidence payloads, and blueprints outside the operation-specific allowlist. Every returned entity is validated against its repository blueprint before it can be attached to the Port action run. Healthy handoff or successful recovery also creates three target-scoped review tasks; task identifiers cannot collide across targets.
+
+Axis retries require the exact failed axis entity, preserve X/Y/Z ownership, retain the Port run ID and outcome for every attempt, enforce a two-attempt budget, and coalesce concurrent requests with the same idempotency key. Source-healing approval is bound to the pending axis, source execution, and healing request recorded on the entity; approval never performs the retry itself.
 
 ## Credential-free smoke test (validated locally)
 
@@ -130,19 +132,21 @@ Compare the two `plan_hash` values in command output and inspect the `plan_revis
 
 `npm run port:sync` is dry-run only and makes no network changes. No Port credentials or UI access are needed for any command above.
 
-## Port account setup (user-required; not locally validated)
+## Port account setup
 
 1. Install Port's GitHub integration for the repository and permit it to dispatch `.github/workflows/port-delivery.yml`.
-2. In ignored `.env.local`, set `PORT_CLIENT_ID`, `PORT_CLIENT_SECRET`, `PORT_GITHUB_ORG`, and `PORT_GITHUB_REPO`. Use `PORT_API_URL=https://api.us.port.io` for a US-region account; the default is the EU API.
+2. In ignored `.env.local`, set `PORT_CLIENT_ID` and `PORT_CLIENT_SECRET`. Use `PORT_API_URL=https://api.us.port.io` for a US-region account; the default is the EU API. The non-secret GitHub coordinates are versioned directly in the actions as `ali-amjad52114/Zerdowntime`.
 3. Add `PORT_CLIENT_ID` and `PORT_CLIENT_SECRET` as GitHub Actions repository secrets. Do not put their values in Port JSON, workflow inputs, logs, or commits.
 4. Also configure GitHub secrets `MEND_API_URL` and `MEND_PORT_ACTION_TOKEN` for the control adapter. They are never placed in a Port entity or workflow input.
 5. Run `npm run port:validate`, then `npm run port:sync -- --live`. The sync creates or replaces the fourteen blueprints, production-safe seed entities, three generic delivery actions, and five Mend control actions. Re-running it is idempotent. Regression entities and validated examples are not automatically synced.
 6. Restrict action execution/approval RBAC in Port to intended teams or users. Candidate handoff, source healing, target decisions, and generic release require manual approval.
 7. After each real action, retain the Port action run ID, Mend `action_execution_id`, GitHub run URL, affected entity IDs, and redacted request/result artifact.
 
-If API sync is unavailable, create the blueprints in manifest order, then seed entities, then create the actions by pasting their JSON in Port. Replace the two `REPLACE_WITH_GITHUB_*` values when using this manual route.
+If API sync is unavailable, create the blueprints in manifest order, then seed entities, then create the actions by pasting their JSON in Port.
 
-## Connected smoke test (user-required)
+## Connected smoke test
+
+`npm run port:live:smoke` performs a read-only check of every manifest blueprint and action and writes a redacted receipt artifact. Add `-- --dispatch` only for the bounded generic prepare action; it does not release. A Mend action smoke additionally requires the disease-first workflow to exist on GitHub's default branch plus configured `MEND_API_URL` and `MEND_PORT_ACTION_TOKEN` GitHub secrets.
 
 The G3 Port gate is not satisfied by catalog sync or a CLI exit code. Retain screenshots or API output proving all of the following against the live account:
 

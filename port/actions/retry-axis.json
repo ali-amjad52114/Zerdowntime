@@ -13,11 +13,11 @@
   "invocationMethod": {
     "type": "INTEGRATION_ACTION", "installationId": "github-ocean", "integrationActionType": "dispatch_workflow",
     "integrationActionExecutionProperties": {
-      "org": "REPLACE_WITH_GITHUB_ORG", "repo": "REPLACE_WITH_GITHUB_REPO", "workflow": "port-mend-control.yml",
+      "org": "ali-amjad52114", "repo": "Zerdowntime", "workflow": "port-mend-control.yml",
       "workflowInputs": {
         "operation": "retry_axis", "port_run_id": "{{ .run.id }}", "entity_id": "{{ .entity.identifier }}",
         "parent_id": "{{ .entity.relations.target_run }}", "actor": "{{ .run.triggeredBy }}",
-        "payload_json": "{\"axis\":{{ .entity.properties.axis | tojson }},\"reason\":{{ .inputs.reason | tojson }},\"expected_status\":\"failed\",\"expected_retry_count\":{{ .entity.properties.retry_count }}}"
+        "payload_json": "{\"axis\":{{ .entity.properties.axis | tojson }},\"reason\":{{ .inputs.reason | tojson }},\"expected_status\":{{ .entity.properties.status | tojson }},\"expected_retry_count\":{{ .entity.properties.retry_count }}}"
       }, "reportWorkflowStatus": true
     }
   },

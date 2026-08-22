@@ -59,9 +59,16 @@ test("action envelopes are versioned, idempotent, validated, and result-correlat
   assert.deepEqual(envelope.correlation, { "port.run.id": "port-run-17", "candidate.id": "candidate-2", "disease.run.id": "disease-1" });
   assert.throws(() => buildMendPortEnvelope({ ...envelope, action: "retry_axis", portRunId: "x", entityId: "a", parentId: "t", actor: "r", payload: { axis: "X", reason: "again", expected_status: "failed", expected_retry_count: -1 } }), /non-negative integer/);
   const result = {
-    contract_version: MEND_PORT_CONTRACT_VERSION, port_run_id: "port-run-17", action_execution_id: "mend-action-9", status: "accepted",
-    port_entities: [{ blueprint: "mendCandidateTarget", entity: { identifier: "candidate-2", properties: { selection_status: "handed_off" } } }]
+    contract_version: MEND_PORT_CONTRACT_VERSION, port_run_id: "port-run-17", action: "handoff_candidate", action_execution_id: "mend-action-9", status: "accepted",
+    port_entities: [{ blueprint: "mendCandidateTarget", entity: {
+      identifier: "candidate-2", title: "Candidate 2",
+      properties: { display_name: "Candidate 2", ranking_score: 1, supporting_evidence_count: 1, contradictory_evidence_count: 0, evidence_ids: ["evidence-1"], selection_status: "handed_off", contract_version: MEND_PORT_CONTRACT_VERSION },
+      relations: { disease_run: "disease-1" }
+    } }]
   };
   assert.equal(validateMendPortResult(result, envelope), result);
   assert.throws(() => validateMendPortResult({ ...result, port_run_id: "wrong" }, envelope), /does not match/);
+  const malformed = structuredClone(result);
+  malformed.port_entities[0].entity.properties.placeholder = "not in the blueprint";
+  assert.throws(() => validateMendPortResult(malformed, envelope), /not defined by mendCandidateTarget/);
 });
