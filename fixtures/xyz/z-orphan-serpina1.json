@@ -1,0 +1,46 @@
+{
+  "fixture_notice": "Synthetic, deterministic orphan-designation metadata for adapter tests. Sponsors and dates are invented to exercise every clock state; this is not a register extract.",
+  "records": [
+    {
+      "agency": "FDA",
+      "designation": "Example AAT corrector (fixture)",
+      "sponsor": "Example Therapeutics One",
+      "indication": "Alpha-1 antitrypsin deficiency",
+      "designated_on": "2022-04-12",
+      "paediatric": false,
+      "source_url": "https://register.example.invalid/fda/designation/EX-2022-0412",
+      "evidence": "Fixture register entry: designated for alpha-1 antitrypsin deficiency, no approval recorded."
+    },
+    {
+      "agency": "FDA",
+      "designation": "Example AAT augmentation (fixture)",
+      "sponsor": "Example Therapeutics Two",
+      "indication": "Alpha-1 antitrypsin deficiency",
+      "designation_date": "2019-06-01",
+      "approval_date": "2023-02-15",
+      "pediatric": true,
+      "sourceUrl": "https://register.example.invalid/fda/designation/EX-2019-0601",
+      "indication_text": "Fixture register entry: designated 2019, approved 2023, paediatric flag set."
+    },
+    {
+      "authority": "ema",
+      "designatedDrug": "Example AAT gene therapy (fixture)",
+      "company": "Example Therapeutics Three",
+      "designatedIndication": "Alpha-1 antitrypsin deficiency",
+      "designatedOn": "2011-09-30",
+      "url": "https://register.example.invalid/ema/designation/EU-3-11-0930",
+      "snippet": "Fixture register entry: designated 2011, no approval recorded, deliberately old to exercise the stalled signal."
+    },
+    {
+      "agency": "FDA",
+      "designation": "Example legacy AAT product (fixture)",
+      "sponsor": "Example Therapeutics Four",
+      "indication": "Alpha-1 antitrypsin deficiency",
+      "designated_on": "2004-01-20",
+      "approved_on": "2007-03-05",
+      "paediatric": false,
+      "source_url": "https://register.example.invalid/fda/designation/EX-2004-0120",
+      "evidence": "Fixture register entry: approved 2007, so the seven-year clock has run out by the fixed test date."
+    }
+  ]
+}

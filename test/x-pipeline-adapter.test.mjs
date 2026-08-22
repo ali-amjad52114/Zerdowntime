@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
+  STAGE_RANK,
   normalizeXPipeline,
   runXAxis,
   validateXPipeline,
@@ -86,4 +87,11 @@ test('normalizer accepts Bright Data evidence_excerpt output', () => {
 
   assert.equal(record.evidenceText, 'Fazirsiran (ARO-AAT): Alpha-1 Liver Disease (Phase 3)');
   assert.equal(validateXPipeline([record], { maxMissingRatio: 0.67 }).status, 'PASS');
+});
+
+test('STAGE_RANK is exported so downstream consumers share one ladder', () => {
+  assert.equal(STAGE_RANK.get('Discovery'), 1);
+  assert.equal(STAGE_RANK.get('Approved'), 8);
+  assert.equal(STAGE_RANK.get('Phase 2'), 5);
+  assert.equal(STAGE_RANK.get('Unknown stage'), undefined);
 });

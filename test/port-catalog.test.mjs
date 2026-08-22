@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 const read = (path) => JSON.parse(readFileSync(path, "utf8"));
@@ -17,7 +17,10 @@ test("Port catalog models the constrained SERPINA1 X/Y/Z brief", () => {
   assert.match(brief.properties.target, /SERPINA1/);
 
   const integrations = read("port/entities/xyz-integrations.json");
-  assert.deepEqual(integrations.map((item) => item.properties.axis).sort(), ["X", "Y", "Z"]);
+  // Each axis carries its own sub-axis integration: X adds trial site geography, Y adds
+  // target identity, Z adds orphan exclusivity. Sub-axes are narrowings, not a fourth axis.
+  assert.deepEqual(integrations.map((item) => item.properties.axis).sort(), ["X", "X", "Y", "Y", "Z", "Z"]);
+  assert.ok(integrations.every((item) => existsSync(item.properties.artifact_path)));
   assert.equal(integrations.find((item) => item.properties.axis === "X").properties.provider, "Bright Data");
   assert.ok(integrations.every((item) => item.properties.evidence_required));
 });

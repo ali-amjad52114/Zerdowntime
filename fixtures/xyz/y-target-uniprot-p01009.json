@@ -1,0 +1,31 @@
+{
+  "fixture_notice": "Saved UniProtKB-shaped response for P01009 (SERPINA1). Values are transcribed from the public UniProtKB entry, not captured from a live call: this environment cannot reach rest.uniprot.org, so no request has been executed against it. Verify at https://www.uniprot.org/uniprotkb/P01009/entry before quoting any figure.",
+  "feature_notice": "The variant list is a documented subset, not the complete UniProt feature set. Positions are precursor numbering, which includes the 24-residue signal peptide, so each variant is 24 higher than its classical mature-protein name (PI Z, Glu342Lys, is position 366 here).",
+  "verify_before_relying": true,
+  "source_name": "UniProtKB",
+  "results": [
+    {
+      "primaryAccession": "P01009",
+      "proteinDescription": { "recommendedName": { "fullName": { "value": "Alpha-1-antitrypsin" } } },
+      "genes": [{ "geneName": { "value": "SERPINA1" } }],
+      "sequence": { "molWeight": 46737, "length": 418 },
+      "comments": [
+        {
+          "commentType": "SUBCELLULAR LOCATION",
+          "subcellularLocations": [{ "location": { "value": "Secreted" } }],
+          "texts": [{ "value": "Synthesised in hepatocytes and secreted into plasma, where it inhibits neutrophil elastase in the lung." }]
+        }
+      ],
+      "features": [
+        { "type": "Signal", "description": "Cleaved before secretion", "location": { "start": { "value": 1 }, "end": { "value": 24 } } },
+        { "type": "Site", "description": "Reactive bond, P1-P1' (Met-Ser)", "location": { "start": { "value": 382 }, "end": { "value": 383 } } },
+        { "type": "Natural variant", "description": "PI I; R->C at mature residue 39", "location": { "start": { "value": 63 }, "end": { "value": 63 } } },
+        { "type": "Natural variant", "description": "PI Siiyama; S->F at mature residue 53", "location": { "start": { "value": 77 }, "end": { "value": 77 } } },
+        { "type": "Natural variant", "description": "PI F; R->C at mature residue 223", "location": { "start": { "value": 247 }, "end": { "value": 247 } } },
+        { "type": "Natural variant", "description": "PI S; E->V at mature residue 264", "location": { "start": { "value": 288 }, "end": { "value": 288 } } },
+        { "type": "Natural variant", "description": "PI Z; E->K at mature residue 342, the polymerising allele", "location": { "start": { "value": 366 }, "end": { "value": 366 } } },
+        { "type": "Natural variant", "description": "Pittsburgh; M->R at mature residue 358, retargets the inhibitor to thrombin", "location": { "start": { "value": 382 }, "end": { "value": 382 } } }
+      ]
+    }
+  ]
+}

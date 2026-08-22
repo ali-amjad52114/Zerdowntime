@@ -65,10 +65,13 @@ test('Mend API and target view expose healthy, isolated X failure, and v2 recove
   assert.equal(view.status, 200);
   const html = await view.text();
   assert.match(html, /SERPINA1/);
-  assert.match(html, /X — PIPELINE/);
-  assert.match(html, /Y — STRUCTURE/);
-  assert.match(html, /Z — IP ACTIVITY/);
-  assert.match(html, /Factory v2 · HEALTHY/);
+  // The target view was rebuilt on this branch: axis headings are sentence case and the
+  // factory version and publish status moved into the header run pill.
+  assert.match(html, /X — Pipeline activity/);
+  assert.match(html, /Y — Structural readiness/);
+  assert.match(html, /Z — IP activity/);
+  assert.match(html, /factory v2 · PUBLISHED/);
+  assert.match(html, /HEALTHY/);
   assert.match(html, /Evidence → Action/i);
   assert.match(html, /Proceed To Focused Diligence/);
   assert.match(html, /portfolio-lead/);

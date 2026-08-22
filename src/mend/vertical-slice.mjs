@@ -15,6 +15,31 @@ function failSpan(telemetry, span, error) {
   telemetry?.failSpan?.(span, error);
 }
 
+/**
+ * A sub-axis is a narrowing of its axis, not a fourth axis: it carries the same evidence
+ * contract, keeps its own record set, and reports its own gate. Its records are validated
+ * against the parent axis so a mislabelled record cannot slip in through the side door.
+ */
+function collectSubAxes(subAxes, { axis, runId, telemetry, span }) {
+  const collected = {};
+  for (const [name, result] of Object.entries(subAxes ?? {})) {
+    const records = validateEvidenceRecords(result?.records, axis);
+    collected[name] = {
+      axis,
+      sub_axis: name,
+      records,
+      summary: result?.summary ?? {},
+      validation: result?.validation ?? { status: 'PASS', issues: [] },
+    };
+    span.setAttribute(`axis.sub_axis.${name}.records`, records.length);
+    telemetry?.log?.('INFO', `${axis}/${name} sub-axis healthy`, {
+      'run.id': runId, axis, 'sub.axis': name, 'record.count': records.length,
+      'validation.status': collected[name].validation.status ?? 'PASS',
+    }, span);
+  }
+  return collected;
+}
+
 async function executeAxis({ axis, runner, mode, previousHealthy, runId, telemetry, parentSpan }) {
   const span = startSpan(telemetry, `axis.${axis.toLowerCase()}`, {
     'run.id': runId,
@@ -28,6 +53,7 @@ async function executeAxis({ axis, runner, mode, previousHealthy, runId, telemet
     if (output?.validation?.status && output.validation.status !== 'PASS') {
       throw new Error(output.validation.reason ?? `${axis} validation failed`);
     }
+    const subAxes = collectSubAxes(output?.sub_axes, { axis, runId, telemetry, span });
     span.setAttribute('axis.records', records.length);
     span.setAttribute('validation.status', 'PASS');
     telemetry?.metrics?.axisRecords?.[axis]?.record(records.length, { axis, 'run.id': runId, outcome: 'success' });
@@ -38,6 +64,7 @@ async function executeAxis({ axis, runner, mode, previousHealthy, runId, telemet
       records,
       summary: output?.summary ?? {},
       validation: output?.validation ?? { status: 'PASS', checks: [] },
+      sub_axes: subAxes,
     };
   } catch (error) {
     failSpan(telemetry, span, error);
@@ -54,6 +81,7 @@ async function executeAxis({ axis, runner, mode, previousHealthy, runId, telemet
       records: healthy,
       summary: previousHealthy?.summary ?? {},
       validation: { status: 'FAIL', reason: error.message },
+      sub_axes: previousHealthy?.sub_axes ?? {},
       quarantine: { reason: error.message, candidateRecords: [] },
     };
   } finally {
@@ -140,7 +168,7 @@ export function healthySnapshot(run) {
   return Object.fromEntries(AXES.flatMap((axis) => {
     const result = run?.axes?.[axis];
     return result?.status === 'HEALTHY'
-      ? [[axis, { records: result.records, summary: result.summary }]]
+      ? [[axis, { records: result.records, summary: result.summary, sub_axes: result.sub_axes ?? {} }]]
       : [];
   }));
 }

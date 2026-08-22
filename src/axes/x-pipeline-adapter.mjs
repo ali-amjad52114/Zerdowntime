@@ -66,14 +66,20 @@ export function normalizeXPipeline(rawRecords, snapshot = {}) {
   });
 }
 
+/**
+ * Shared development-stage ladder. Exported so downstream, non-axis consumers (product
+ * positioning, resourcing) can read the same ranking rather than redeclaring it — a business
+ * rule like "Phase 2 outranks Preclinical" belongs in exactly one place.
+ */
+export const STAGE_RANK = new Map([
+  ['Discovery', 1], ['Preclinical', 2], ['Phase 1', 3], ['Phase 1/2', 4],
+  ['Phase 2', 5], ['Phase 2/3', 6], ['Phase 3', 7], ['Approved', 8],
+]);
+
 export function summarizeXPipeline(records) {
   const organizations = new Set(records.map((record) => record.organization).filter(Boolean));
-  const stageRank = new Map([
-    ['Discovery', 1], ['Preclinical', 2], ['Phase 1', 3], ['Phase 1/2', 4],
-    ['Phase 2', 5], ['Phase 2/3', 6], ['Phase 3', 7], ['Approved', 8],
-  ]);
   const stages = records.map((record) => record.developmentStage).filter(Boolean);
-  const mostAdvancedStage = stages.sort((a, b) => (stageRank.get(b) ?? 0) - (stageRank.get(a) ?? 0))[0] ?? null;
+  const mostAdvancedStage = stages.sort((a, b) => (STAGE_RANK.get(b) ?? 0) - (STAGE_RANK.get(a) ?? 0))[0] ?? null;
 
   return {
     programsFound: records.length,
