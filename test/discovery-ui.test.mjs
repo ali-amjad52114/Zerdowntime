@@ -35,7 +35,8 @@ test('renders discovery input, corpus, scored evidence, selection, and X/Y/Z han
   assert.match(html, /SERPINA1 variants cause AATD/);
   assert.match(html, /Contradictory passages/);
   assert.match(html, /Response may depend on genotype/);
-  assert.match(html, /data-candidate-select checked/);
+  assert.match(html, /data-candidate-select[\s\S]*\schecked/);
+  assert.match(html, /Analyze Target/);
   assert.match(html, /Hand off to X\/Y\/Z/);
   assert.match(html, />X<[\s\S]*>Y<[\s\S]*>Z</);
   assert.match(html, /\/mend\/discovery\/start/);
