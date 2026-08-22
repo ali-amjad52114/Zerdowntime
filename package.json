@@ -20,7 +20,8 @@
     "port:smoke": "npm run port:validate && npm run port:test",
     "port:prepare": "node scripts/port-workflow.mjs prepare --brief fixtures/port/brief.json --run-id local-demo",
     "port:release": "node scripts/port-workflow.mjs release --run-id local-demo --decision approve --actor local-reviewer",
-    "port:sync": "node scripts/port-sync.mjs"
+    "port:sync": "node scripts/port-sync.mjs",
+    "port:live:smoke": "node scripts/port-live-smoke.mjs"
   },
   "devDependencies": {
     "@brightdata/cli": "latest"
