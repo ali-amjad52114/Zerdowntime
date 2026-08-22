@@ -71,6 +71,68 @@ if (probed.body?.result?.isError) {
   throw new Error(`workspace read probe failed: ${detail}`);
 }
 
+function parseToolJson(text) {
+  const json = text.split(/\s+(?:note:|\[Decisions applied\])/)[0];
+  return JSON.parse(json);
+}
+
+const telemetryProbes = [];
+const verifyRunId = process.env.SIGNOZ_VERIFY_RUN_ID;
+if (verifyRunId) {
+  for (const name of ['signoz_aggregate_logs', 'signoz_aggregate_traces']) {
+    const response = await request({
+      jsonrpc: '2.0',
+      id: telemetryProbes.length + 4,
+      method: 'tools/call',
+      params: {
+        name,
+        arguments: {
+          aggregation: 'count',
+          filter: `run.id = '${verifyRunId}'`,
+          timeRange: '1h',
+          searchContext: `Verify telemetry ingestion for run ${verifyRunId}`,
+        },
+      },
+    }, initialized.sessionId);
+    if (response.body?.error || response.body?.result?.isError) {
+      const detail = response.body?.error?.message ?? response.body?.result?.content
+        ?.map((item) => item.text).filter(Boolean).join(' ') ?? 'unknown error';
+      throw new Error(`${name} failed: ${detail}`);
+    }
+    const resultText = response.body?.result?.content?.map((item) => item.text).filter(Boolean).join(' ') ?? '';
+    const count = parseToolJson(resultText)?.data?.data?.results?.[0]?.data?.[0]?.[0];
+    if (!(Number(count) > 0)) throw new Error(`${name} returned no matching telemetry for ${verifyRunId}`);
+    telemetryProbes.push({ tool: name, count: Number(count) });
+  }
+
+  const metricResponse = await request({
+    jsonrpc: '2.0',
+    id: 6,
+    method: 'tools/call',
+    params: {
+      name: 'signoz_query_metrics',
+      arguments: {
+        metricName: 'zero_downtime_runs_total',
+        timeRange: '1h',
+        searchContext: `Verify telemetry ingestion for run ${verifyRunId}`,
+      },
+    },
+  }, initialized.sessionId);
+  if (metricResponse.body?.error || metricResponse.body?.result?.isError) {
+    const detail = metricResponse.body?.error?.message ?? metricResponse.body?.result?.content
+      ?.map((item) => item.text).filter(Boolean).join(' ') ?? 'unknown error';
+    throw new Error(`signoz_query_metrics failed: ${detail}`);
+  }
+  const metricText = metricResponse.body?.result?.content?.map((item) => item.text).filter(Boolean).join(' ') ?? '';
+  const metricRowsScanned = parseToolJson(metricText)?.data?.meta?.rowsScanned;
+  if (!(Number(metricRowsScanned) > 0)) throw new Error('signoz_query_metrics found no ingested metric rows');
+  telemetryProbes.push({
+    tool: 'signoz_query_metrics',
+    metric: 'zero_downtime_runs_total',
+    rowsScanned: Number(metricRowsScanned),
+  });
+}
+
 console.log(JSON.stringify({
   ok: true,
   endpoint,
@@ -80,5 +142,6 @@ console.log(JSON.stringify({
   protocolVersion: initialized.body?.result?.protocolVersion,
   toolCount: tools.length,
   workspaceReadProbe: readProbeTool.name,
+  telemetryProbes,
   sampleTools: tools.slice(0, 8).map((tool) => tool.name),
 }, null, 2));

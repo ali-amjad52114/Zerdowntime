@@ -1,13 +1,9 @@
-import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { createApp } from '../src/server.mjs';
 
 const port = Number(process.env.SMOKE_PORT ?? 3100);
 const base = `http://127.0.0.1:${port}`;
-const child = spawn(process.execPath, ['src/server.mjs'], {
-  env: { ...process.env, PORT: String(port) }, stdio: ['ignore', 'pipe', 'pipe'],
-});
-child.stdout.pipe(process.stdout);
-child.stderr.pipe(process.stderr);
+const app = createApp();
 
 async function waitForHealth() {
   for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -30,13 +26,15 @@ async function run(mode) {
 }
 
 try {
+  await new Promise((resolve, reject) => {
+    app.server.once('error', reject);
+    app.server.listen(port, '127.0.0.1', resolve);
+  });
+  console.log(`zero-downtime fixture listening on ${base}`);
   await waitForHealth();
   const runIds = [await run('normal'), await run('fail'), await run('recover')];
   console.log(`Telemetry smoke complete. Search SigNoz for run.id IN (${runIds.join(', ')}).`);
 } finally {
-  child.kill('SIGTERM');
-  await new Promise((resolve) => {
-    const timeout = setTimeout(resolve, 5_000);
-    child.once('exit', () => { clearTimeout(timeout); resolve(); });
-  });
+  await new Promise((resolve) => app.server.close(resolve));
+  await app.telemetry.shutdown();
 }
