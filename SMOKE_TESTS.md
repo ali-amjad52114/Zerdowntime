@@ -31,19 +31,19 @@ This specification proves sponsor-tool integration independently of the final pr
 
 ## Bright Data Scraper Studio smoke tests
 
-- [ ] Create and run the scraper from the repository terminal with the Bright Data CLI.
-- [ ] Store the API key only in the environment or ignored `.env.local`.
-- [ ] Pin the stable Collector ID and usage rules in project guidance.
-- [ ] Return a non-empty, parseable JSON array.
-- [ ] Validate required fields and reject a silently empty/incomplete result.
-- [ ] Save a run artifact for application consumption and demo evidence.
+- [x] Create and run the scraper from the repository terminal with the Bright Data CLI.
+- [x] Store the API key only in the environment or ignored `.env.local`.
+- [x] Pin the stable Collector ID and usage rules in project guidance.
+- [x] Return a non-empty, parseable JSON array.
+- [x] Validate required fields and reject a silently empty/incomplete result.
+- [x] Save a run artifact for application consumption and demo evidence.
 - [ ] Demonstrate that application/pipeline code consumes the records.
 - [ ] Restart the coding session and reuse the same Collector ID/configuration.
-- [ ] Introduce or identify a selector/schema failure.
-- [ ] Run `heal`, review its proposed diff/preview, approve it, and rerun successfully.
-- [ ] Confirm repair retains the Collector ID.
+- [x] Introduce or identify a selector/schema failure.
+- [ ] Run `heal`, review its proposed diff/preview, approve it, and rerun successfully. Two approved repair previews were tested, but production continued to use the bad fan-out behavior; this remains open.
+- [x] Confirm repair retains the Collector ID.
 
-Current neutral fixture: Hacker News top stories with `title`, `url`, `points`, `author`, and `comment_count`. It is not the final product idea.
+Current passing fixture: one public page with `page_title`, `heading`, `description`, and `source_url`. It is deliberately not the final product idea. The Hacker News listing collectors are retained in Bright Data as failure/self-healing evidence because their generated production templates incorrectly fanned out to outbound links even after approved repair previews.
 
 ## SigNoz smoke tests
 
@@ -65,4 +65,3 @@ Current neutral fixture: Hacker News top stories with `title`, `url`, `points`, 
 - [ ] README documents setup, architecture, normal run, failure drill, and recovery.
 - [ ] Automated tests cover schema validation and at least one intentional failure.
 - [ ] A 3–5 minute demo shows the terminal scrape, JSON consumed by the app, Bright Data heal flow, Port workflow/approval/audit, and live SigNoz telemetry.
-

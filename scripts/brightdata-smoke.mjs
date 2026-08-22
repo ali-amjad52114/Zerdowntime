@@ -24,7 +24,13 @@ if (!Array.isArray(rows) || rows.length === 0) {
   process.exit(1);
 }
 
-const required = ["title", "url", "points", "author", "comment_count"];
+const required = (
+  process.env.SCRAPER_STUDIO_EXPECTED_FIELDS ??
+  "page_title,heading,description,source_url"
+)
+  .split(",")
+  .map((field) => field.trim())
+  .filter(Boolean);
 const populated = Object.fromEntries(required.map((field) => [field, 0]));
 for (const row of rows) {
   for (const field of required) {
@@ -40,6 +46,16 @@ if (missingEverywhere.length) {
   process.exit(1);
 }
 
+const minimumCoverage = Math.ceil(rows.length * 0.8);
+const lowCoverage = required.filter((field) => populated[field] < minimumCoverage);
+if (lowCoverage.length) {
+  console.error(
+    `Fields below 80% population: ${lowCoverage
+      .map((field) => `${field} (${populated[field]}/${rows.length})`)
+      .join(", ")}`
+  );
+  process.exit(1);
+}
+
 console.log(`Bright Data smoke test passed with ${rows.length} records.`);
 console.log(JSON.stringify({ populated }, null, 2));
-

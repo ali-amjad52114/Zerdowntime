@@ -1,6 +1,6 @@
 # Zero Downtime Factory
 
-Integration-first scaffold for the Zero Downtime Hackathon. The current Hacker News collector is a neutral fixture used to prove Bright Data Scraper Studio operation while the product idea is still open.
+Integration-first scaffold for the Zero Downtime Hackathon. The current single-page collector is a neutral fixture used to prove Bright Data Scraper Studio operation while the product idea is still open.
 
 ## Bright Data setup
 
