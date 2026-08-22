@@ -56,6 +56,20 @@ test('adapter filters dynamically and preserves exact record evidence', () => {
   assert.equal(result.validation.status, 'PASS');
 });
 
+test('disease-and-target matching isolates records that mention both terms', () => {
+  const isolatedPayload = [
+    { program: 'BOTH-1', disease: 'Cystic fibrosis', target_mechanism: 'CFTR potentiator', development_stage: 'Phase 1', evidence_excerpt: 'CFTR therapy for cystic fibrosis.' },
+    { program: 'DISEASE-ONLY', disease: 'Cystic fibrosis', target_mechanism: 'ENaC inhibitor', development_stage: 'Discovery', evidence_excerpt: 'A cystic fibrosis program.' },
+    { program: 'TARGET-ONLY', disease: 'Secretory diarrhea', target_mechanism: 'CFTR inhibitor', development_stage: 'Discovery', evidence_excerpt: 'A CFTR program in another disease.' },
+  ];
+  const result = executeBrightDataAdapter({
+    request: request({ matchPolicy: 'disease_and_target' }), payload: isolatedPayload,
+    retrievedAt: '2026-08-22T20:00:00.000Z',
+  });
+  assert.deepEqual(result.records.map((record) => record.program), ['BOTH-1']);
+  assert.equal(result.records[0].provenance.raw_record_index, 0);
+});
+
 test('unrelated target run cannot inherit records from the previous target', () => {
   const pcsk9Payload = JSON.parse(readFileSync(new URL('../fixtures/brightdata/pcsk9-pipeline.json', import.meta.url), 'utf8'));
   const pcsk9Request = request({

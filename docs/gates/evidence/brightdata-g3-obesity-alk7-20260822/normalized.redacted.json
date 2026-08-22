@@ -1,0 +1,25 @@
+[
+  {
+    "id": "c57fe864ccbcd500",
+    "axis": "X",
+    "organization": "Arrowhead Pharmaceuticals",
+    "program": "ARO-ALK7",
+    "disease": "Obesity",
+    "targetMechanism": "Adipose",
+    "developmentStage": "Phase 1",
+    "status": null,
+    "sourceUrl": "https://arrowheadpharma.com/en-us/pipeline",
+    "retrievedAt": "2026-08-22T23:36:53.808Z",
+    "evidenceText": "Cardiometabolic - ARO-ALK7: Obesity (Phase 1)",
+    "provenance": {
+      "source_execution_id": "g3-obesity-alk7-20260822",
+      "provider": "bright_data",
+      "asset_id": "c_mt4r97wsmxt9an0ap",
+      "raw_record_index": 9,
+      "matched_terms": {
+        "disease_terms": ["Obesity", "obesity"],
+        "target_terms": ["ALK7"]
+      }
+    }
+  }
+]

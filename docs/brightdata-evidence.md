@@ -24,10 +24,13 @@ Collector `c_mt4ircei2gdaam94xf` is a half-built attempt against Bright Data's o
 
 ## Remaining Bright Data work
 
-- The generic post-selection adapter and durable source-execution contract are now implemented; S1 still needs to call the interface from its target-run orchestration.
-- Run the G3 live proof with an actual external provider run/snapshot ID and retain the redacted execution manifest.
+- Replace or supplement the Arrowhead public-pipeline collector only when a reviewed source or approved marketplace dataset better fits a future target.
 - Ask a Bright Data mentor why approved Self-Healing previews were not reflected in production for the HN collectors.
 - Delete the half-built documentation collector in the Bright Data UI if desired.
 - Rotate the exposed API key, update ignored `.env.local`, and rerun the passing smoke test.
 
-See `docs/brightdata-source-acquisition.md` for the versioned contract, source-selection rules, live inputs, deterministic tests, and gate requirements. No live collector was created, triggered, healed, approved, or scheduled as part of this implementation session.
+## Mend G3 live proof (2026-08-22)
+
+The generalized existing-collector runtime ran the reviewed public Arrowhead pipeline collector for Obesity/ALK7 with `disease_and_target` isolation. Bright Data CLI response ID `d2t1787441811998rnfr6lsqfb4g` returned 21 raw records; one record matched both terms and normalized to a validated, nonempty ARO-ALK7 result. The correlated redacted manifest and normalized proof are retained under `docs/gates/evidence/brightdata-g3-obesity-alk7-20260822/`. The full raw response remains in the ignored runtime artifact directory and is represented durably by its SHA-256 checksum.
+
+See `docs/brightdata-source-acquisition.md` for the versioned contract, source-selection rules, live inputs, deterministic tests, and gate requirements. This proof triggered an existing collector only; it did not create, heal, approve, or schedule a collector.

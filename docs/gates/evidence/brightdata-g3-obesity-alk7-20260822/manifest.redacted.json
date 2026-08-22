@@ -1,0 +1,66 @@
+{
+  "contract_version": "mend.source-execution.v1",
+  "evidence_type": "redacted_live_g3",
+  "execution_id": "g3-obesity-alk7-20260822",
+  "mode": "live",
+  "status": "succeeded",
+  "correlation": {
+    "disease_run_id": "disease-obesity-g3-20260822",
+    "candidate_id": "candidate-alk7-g3",
+    "target_run_id": "target-alk7-g3-20260822",
+    "axis": "X"
+  },
+  "provider": {
+    "name": "bright_data",
+    "source_kind": "scraper_studio_collector",
+    "asset_id": "c_mt4r97wsmxt9an0ap",
+    "run_id": "d2t1787441811998rnfr6lsqfb4g",
+    "run_id_source": "Bright Data CLI stderr response_id"
+  },
+  "request": {
+    "disease": "Obesity",
+    "target": "ALK7",
+    "target_aliases": ["ACVR1C"],
+    "match_policy": "disease_and_target",
+    "source_url": "https://arrowheadpharma.com/en-us/pipeline",
+    "public_source_approved": true
+  },
+  "timing": {
+    "started_at": "2026-08-22T23:36:45.963Z",
+    "completed_at": "2026-08-22T23:36:53.814Z"
+  },
+  "artifacts": {
+    "runtime_directory": "artifacts/source-executions/g3-obesity-alk7-20260822",
+    "raw": {
+      "path": "raw.json",
+      "sha256": "f057c2d73fb6203d00ce3772d221d58f14ad24f40609b8fc445994d226f95ed6",
+      "bytes": 11030,
+      "committed": false
+    },
+    "normalized": {
+      "path": "normalized.json",
+      "sha256": "3be63b8dc3571f0ed48b359ba52d720bab3254b39417cbb9ed2979794247a208",
+      "bytes": 1061,
+      "committed_redacted_copy": "normalized.redacted.json"
+    }
+  },
+  "counts": { "raw": 21, "relevant": 1, "normalized": 1 },
+  "validation": {
+    "status": "PASS",
+    "quarantined": false,
+    "reasons": [],
+    "currentCount": 1,
+    "missingRatio": 0.3333333333333333
+  },
+  "live_gate": {
+    "provider_run_id_present": true,
+    "nonempty_response": true,
+    "correlated": true,
+    "pass": true
+  },
+  "redaction": {
+    "credentials_included": false,
+    "cli_stderr_included": false,
+    "raw_provider_response_committed": false
+  }
+}

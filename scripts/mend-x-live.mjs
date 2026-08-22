@@ -1,11 +1,9 @@
-import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { loadLocalEnv } from './env.mjs';
 import {
   createBrightDataAcquisitionRequest,
-  executeBrightDataAdapter,
-  persistBrightDataSourceExecution,
 } from '../src/acquisition/brightdata-source.mjs';
+import { runExistingBrightDataCollector } from '../src/acquisition/brightdata-cli.mjs';
 
 loadLocalEnv();
 const list = (name) => String(process.env[name] ?? '').split(',').map((value) => value.trim()).filter(Boolean);
@@ -37,30 +35,9 @@ const request = createBrightDataAcquisitionRequest({
   },
 });
 
-const startedAt = new Date().toISOString();
-const cli = spawnSync(process.execPath, [
-  'node_modules/@brightdata/cli/dist/index.js', 'scraper', 'run',
-  request.source.asset_id, request.source.url, '--pretty',
-], { encoding: 'utf8', env: process.env });
-if (cli.stderr) process.stderr.write(cli.stderr);
-if (cli.error || cli.status !== 0) process.exit(cli.status ?? 1);
-const providerRunId = process.env.MEND_X_PROVIDER_RUN_ID
-  || cli.stderr?.match(/response_id:\s*([A-Za-z0-9_-]+)/i)?.[1]
-  || null;
-
-let payload;
-try {
-  payload = JSON.parse(cli.stdout);
-} catch (error) {
-  console.error(`Bright Data returned invalid JSON: ${error.message}`);
-  process.exit(1);
-}
-const adapterResult = executeBrightDataAdapter({ request, payload });
-const execution = persistBrightDataSourceExecution({
-  request, payload, adapterResult,
+const { result: adapterResult, execution } = await runExistingBrightDataCollector({
+  request,
   executionId: process.env.MEND_SOURCE_EXECUTION_ID ?? randomUUID(),
-  providerRunId,
-  startedAt, mode: 'live',
 });
 process.stdout.write(`${JSON.stringify({ execution, result: adapterResult }, null, 2)}\n`);
 if (adapterResult.validation.status !== 'PASS') process.exit(1);

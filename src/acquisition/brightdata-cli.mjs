@@ -9,6 +9,10 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+export function extractBrightDataResponseId(stderr) {
+  return String(stderr ?? '').match(/\bresponse_id\s*:\s*([A-Za-z0-9._-]+)/i)?.[1] ?? null;
+}
+
 function list(value) {
   return String(value ?? '').split(',').map((item) => item.trim()).filter(Boolean);
 }
@@ -32,23 +36,49 @@ export function createBrightDataCliAcquirer({ environment = process.env, artifac
         publicSourceApproved: environment.MEND_X_PUBLIC_SOURCE_APPROVED === 'true',
       },
     });
-    const startedAt = new Date().toISOString();
-    const { stdout, stderr } = await execFileAsync(process.execPath, [
-      'node_modules/@brightdata/cli/dist/index.js', 'scraper', 'run', request.source.asset_id, request.source.url, '--pretty',
-    ], { encoding: 'utf8', env: environment, timeout: 120_000, windowsHide: true, maxBuffer: 20 * 1024 * 1024 });
-    if (stderr?.trim()) process.stderr.write(stderr);
-    let payload;
-    try { payload = JSON.parse(stdout); } catch (error) { throw new Error(`Bright Data returned invalid JSON: ${error.message}`); }
-    const result = executeBrightDataAdapter({ request, payload });
-    const execution = persistBrightDataSourceExecution({
-      artifactRoot, request, payload, adapterResult: result,
-      executionId: randomUUID(),
-      providerRunId: environment.MEND_X_PROVIDER_RUN_ID
-        || stderr?.match(/response_id:\s*([A-Za-z0-9_-]+)/i)?.[1]
-        || null,
-      startedAt, mode: 'live',
+    const { result, execution } = await runExistingBrightDataCollector({
+      request, environment, artifactRoot,
     });
     if (result.validation.status !== 'PASS') throw new Error(`Bright Data X validation failed: ${result.validation.reasons?.join(', ') ?? 'unknown reason'}`);
     return { ...result, source_execution: execution };
   };
+}
+
+export async function runExistingBrightDataCollector({
+  request,
+  environment = process.env,
+  artifactRoot,
+  executionId = randomUUID(),
+  executeFile = execFileAsync,
+  startedAt = new Date().toISOString(),
+} = {}) {
+  if (!environment.BRIGHTDATA_API_KEY) throw new TypeError('BRIGHTDATA_API_KEY is required');
+  let stdout;
+  let stderr;
+  try {
+    ({ stdout, stderr } = await executeFile(process.execPath, [
+      'node_modules/@brightdata/cli/dist/index.js', 'scraper', 'run',
+      request.source.asset_id, request.source.url, '--pretty',
+    ], {
+      encoding: 'utf8', env: environment, timeout: 120_000,
+      windowsHide: true, maxBuffer: 20 * 1024 * 1024,
+    }));
+  } catch (error) {
+    const exitCode = Number.isInteger(error?.code) ? ` (exit ${error.code})` : '';
+    throw new Error(`Bright Data CLI execution failed${exitCode}`);
+  }
+  const providerRunId = extractBrightDataResponseId(stderr);
+  if (!providerRunId) throw new Error('Bright Data CLI did not report a response_id');
+  let payload;
+  try {
+    payload = JSON.parse(stdout);
+  } catch (error) {
+    throw new Error(`Bright Data returned invalid JSON: ${error.message}`);
+  }
+  const result = executeBrightDataAdapter({ request, payload });
+  const execution = persistBrightDataSourceExecution({
+    artifactRoot, request, payload, adapterResult: result,
+    executionId, providerRunId, startedAt, mode: 'live',
+  });
+  return { request, payload, result, execution };
 }
