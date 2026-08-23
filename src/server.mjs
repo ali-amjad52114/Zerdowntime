@@ -953,11 +953,20 @@ export function createApp({
         sendJson(response, 200, latestDiligenceWorkflow);
         return;
       }
-      if (request.method === 'GET' && url.pathname === '/mend') {
+      if (request.method === 'GET' && (url.pathname === '/mend/research' || url.pathname === '/reference/mend-discovery')) {
         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        response.end(discoveryState.status !== 'NOT_STARTED' || !latestMendRun
-          ? renderDiscoveryView(discoveryState)
-          : renderTargetView(latestMendRun, latestDiligenceWorkflow));
+        response.end(renderDiscoveryView(discoveryState));
+        return;
+      }
+      if (request.method === 'GET' && url.pathname === '/mend') {
+        const canonicalRun = latestMendRun ?? [...targetRuns.values()].at(-1) ?? null;
+        const canonicalWorkflow = canonicalRun
+          ? diligenceWorkflows.get(canonicalRun.runId) ?? (latestDiligenceWorkflow?.runId === canonicalRun.runId ? latestDiligenceWorkflow : null)
+          : null;
+        response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        response.end(canonicalRun
+          ? renderTargetView(canonicalRun, canonicalWorkflow)
+          : renderDiscoveryView(discoveryState));
         return;
       }
       if (request.method === 'POST' && url.pathname === '/mend/runs') {

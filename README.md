@@ -74,7 +74,14 @@ how heavy, and where in the cell). Each has a `mendAxisIntegration` entity in
 
 ## Mend X/Y/Z vertical slice
 
-The browser entry point is now disease-first. Open <http://localhost:3000/mend>,
+The canonical browser entry point is <http://localhost:3000/mend>. Before a target
+has been selected it opens the disease-first research workflow; after handoff it opens
+the polished target dossier using the discovered disease and target. Use
+<http://localhost:3000/mend/research> to research another disease or select another target.
+The former discovery renderer is preserved under `reference/frontend/` and can be compared
+at <http://localhost:3000/reference/mend-discovery> without making it a second product.
+
+In the research workflow, enter a disease or indication,
 enter a disease, and Mend retrieves a bounded live Europe PMC corpus plus its
 Gene/Protein annotations. It deduplicates papers, preserves source links,
 discovers candidate targets, and ranks them using exact supporting and

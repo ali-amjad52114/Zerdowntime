@@ -129,8 +129,15 @@ test('disease research discovers evidence-linked targets before X/Y/Z handoff', 
 
   const html = await (await fetch(`${base}/mend`)).text();
   assert.match(html, /Example disease/);
-  assert.match(html, /EGFR dependency/);
-  assert.match(html, /EGFR is required for disease progression/);
-  assert.match(html, /EGFR was not associated with response/);
-  assert.match(html, /COMPLETE/);
+  assert.match(html, /<h1>EGFR<\/h1>/);
+  assert.match(html, /Factory line/);
+
+  const researchHtml = await (await fetch(`${base}/mend/research`)).text();
+  assert.match(researchHtml, /EGFR dependency/);
+  assert.match(researchHtml, /EGFR is required for disease progression/);
+  assert.match(researchHtml, /EGFR was not associated with response/);
+  assert.match(researchHtml, /COMPLETE/);
+
+  const referenceHtml = await (await fetch(`${base}/reference/mend-discovery`)).text();
+  assert.equal(referenceHtml, researchHtml);
 });

@@ -30,6 +30,15 @@ test('the view presents five panels mapped onto the three existing axes', async 
   assert.doesNotMatch(html, /W axis|fourth axis/);
 });
 
+test('the polished dossier renders the disease and discovered target from the run', async () => {
+  const { healthy } = await runs();
+  const html = renderTargetView({ ...healthy, target: 'EGFR', disease: 'Glioblastoma' });
+  assert.match(html, /<h1>EGFR<\/h1>/);
+  assert.match(html, /Glioblastoma/);
+  assert.match(html, /research another disease or target/);
+  assert.doesNotMatch(html, /<h1>SERPINA1<\/h1>/);
+});
+
 test('six further sections are derived from the same five panels, not a sixth axis', async () => {
   const { healthy } = await runs();
   const html = renderTargetView(healthy);

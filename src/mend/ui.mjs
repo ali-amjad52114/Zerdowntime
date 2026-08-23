@@ -29,8 +29,15 @@ import { buildVirtualCellSimulation } from './virtual-cell.mjs';
  * time the page is built, and a hand-rolled server has nothing to hydrate.
  */
 
-const DISEASE = 'Alpha-1 Antitrypsin Deficiency';
-const TARGET = 'SERPINA1';
+const DEFAULT_DISEASE = 'Alpha-1 Antitrypsin Deficiency';
+const DEFAULT_TARGET = 'SERPINA1';
+
+function runIdentity(run) {
+  return {
+    disease: String(run?.disease ?? DEFAULT_DISEASE),
+    target: String(run?.target ?? run?.axes?.Y?.summary?.target ?? DEFAULT_TARGET),
+  };
+}
 
 const STAGE_WORDS = {
   released: 'released',
@@ -232,9 +239,9 @@ ${(summary.topology ?? []).map((text) => `<p class="vcap">${escapeHtml(text)}</p
   });
 }
 
-function marketPanel({ x, geography, stage }) {
+function marketPanel({ x, geography, disease, stage }) {
   const mix = modalityMix((x.records ?? []).map((record) => record.targetMechanism));
-  const cost = costFor(DISEASE);
+  const cost = costFor(disease);
 
   const modalityRows = mix.mix.map((entry) => `<tr>
 <td>${escapeHtml(entry.modality.name)}</td>
@@ -381,13 +388,13 @@ ${result.youAreHere ? caption(`You are here: ${result.youAreHere}, by this run's
   });
 }
 
-function virtualCellPanel({ x, identity, rollup }) {
+function virtualCellPanel({ x, identity, disease, rollup }) {
   const result = buildVirtualCellSimulation({ x, identity });
   const body = `${kindTag(result.kind)}
 <p class="note">${escapeHtml(result.scope ?? '')}</p>
 ${bars3d(result.cells, { ariaLabel: 'Virtual cell simulated perturbation by modality and cellular node', xCategories: result.xCategories, yCategories: result.yCategories, xLabel: result.xLabel, yLabel: result.yLabel, zLabel: result.zLabel, topColorVar: 'var(--struct)' })}
 ${result.message ? caption(result.message) : ''}
-${result.notSimulated?.length ? caption(`Not simulated, no documented AATD mechanism mapping: ${result.notSimulated.join(', ')}.`) : ''}
+${result.notSimulated?.length ? caption(`Not simulated, no documented ${disease} mechanism mapping: ${result.notSimulated.join(', ')}.`) : ''}
 ${result.polymerisingVariantNote ? caption(result.polymerisingVariantNote, { flagged: !result.polymerisingVariantAnnotated }) : ''}`;
   return panel({
     number: '11', title: 'Virtual cell — simulated perturbation', source: 'Derived from X and Y.target_identity', stage: rollup, body,
@@ -653,14 +660,14 @@ document.querySelector('#record-decision')?.addEventListener('click', async () =
 });
 </script>`;
 
-function header(trace) {
+function header(trace, { disease, target }) {
   const status = trace.status ?? 'NOT_RUN';
   const tone = status === 'HEALTHY' ? 'released' : status === 'DEGRADED' ? 'degraded' : 'failed';
   return `<header class="top">
 <div>
 <div class="eyebrow">Mend · agentic software factory</div>
-<h1>${escapeHtml(TARGET)}</h1>
-<p class="sub">${escapeHtml(DISEASE)}</p>
+<h1>${escapeHtml(target)}</h1>
+<p class="sub">${escapeHtml(disease)} · <a href="/mend/research">research another disease or target</a></p>
 </div>
 <div class="runpill"><span class="pstatus s-${escapeHtml(tone)}">${escapeHtml(status)}</span> factory ${escapeHtml(trace.factoryVersion ?? '—')} · ${escapeHtml(trace.publishStatus ?? 'not published')}</div>
 </header>`;
@@ -668,9 +675,10 @@ function header(trace) {
 
 /** The empty state is a page, not a 500: the factory simply has not run in this process yet. */
 export function renderEmptyView() {
+  const identity = runIdentity(null);
   return page({
-    title: `Mend — ${TARGET}/AATD`,
-    content: `${header(buildRunTrace(null))}
+    title: `Mend — ${identity.target}/${identity.disease}`,
+    content: `${header(buildRunTrace(null), identity)}
 <section class="trace">
 <h2>No run yet</h2>
 <p class="sub">The dashboard is the test run, so it renders a run or it renders nothing. Start one:</p>
@@ -686,6 +694,7 @@ export function renderEmptyView() {
 
 export function renderTargetView(run, workflow = null) {
   if (!run?.axes) return renderEmptyView();
+  const { disease, target } = runIdentity(run);
   const trace = buildRunTrace(run);
   const stageOf = (id) => trace.stages.find((stage) => stage.id === id) ?? { status: 'failed', gate: 'UNKNOWN', records: 0, issues: [] };
 
@@ -700,7 +709,7 @@ export function renderTargetView(run, workflow = null) {
     targetPanel({ x, identity, stage: stageOf('X') }),
     structurePanel({ y, identity, stage: stageOf('Y') }),
     locationPanel({ identity, stage: stageOf('Y.target_identity') }),
-    marketPanel({ x, geography, stage: stageOf('X.site_geography') }),
+    marketPanel({ x, geography, disease, stage: stageOf('X.site_geography') }),
     orphanPanel({ z, orphan, stage: stageOf('Z.orphan_exclusivity') }),
   ].join('');
 
@@ -709,14 +718,14 @@ export function renderTargetView(run, workflow = null) {
     positioningPanel({ x, rollup: downstreamRollup.product_positioning }),
     goToMarketPanel({ geography, orphan, rollup: downstreamRollup.go_to_market }),
     generalizationPanel({ x, geography, y, identity, orphan, rollup: downstreamRollup.insight_generalization }),
-    revenuePanel({ x, orphan, disease: DISEASE, rollup: downstreamRollup.revenue_forecast }),
+    revenuePanel({ x, orphan, disease, rollup: downstreamRollup.revenue_forecast }),
     resourcingPanel({ x, rollup: downstreamRollup.resourcing }),
-    virtualCellPanel({ x, identity, rollup: downstreamRollup.virtual_cell_simulation }),
+    virtualCellPanel({ x, identity, disease, rollup: downstreamRollup.virtual_cell_simulation }),
   ].join('');
 
   return page({
-    title: `Mend — ${TARGET}/AATD`,
-    content: `${header(trace)}
+    title: `Mend — ${target}/${disease}`,
+    content: `${header(trace, { disease, target })}
 <section class="trace">
 <div class="tracehead"><h2>Factory line</h2></div>
 <p class="sub">Disease name in, five stations, six derived products — a break in any station is visible all the way through.</p>
