@@ -39,6 +39,89 @@ test('the polished dossier renders the disease and discovered target from the ru
   assert.doesNotMatch(html, /<h1>SERPINA1<\/h1>/);
 });
 
+test('the dossier keeps the exact discovery case for and against the selected target', async () => {
+  const { healthy } = await runs();
+  const run = {
+    ...healthy,
+    target: 'EGFR',
+    disease: 'Glioblastoma',
+    discovery_snapshot: {
+      candidate_id: 'egfr',
+      name: 'EGFR',
+      rank: 2,
+      score: 8.5,
+      supporting_passages: [{
+        text: 'EGFR is required for tumour-cell survival.',
+        source: 'Functional screen',
+        source_url: 'https://example.test/support',
+      }],
+      contradictory_passages: [{
+        text: 'EGFR inhibition did not improve response in this cohort.',
+        source: 'Independent cohort',
+        source_url: 'https://example.test/against',
+      }],
+    },
+  };
+  const html = renderTargetView(run);
+  assert.match(html, /Why this target\?/);
+  assert.match(html, /rank 2 · score 8\.5/);
+  assert.match(html, /EGFR is required for tumour-cell survival\./);
+  assert.match(html, /href="https:\/\/example\.test\/support"/);
+  assert.match(html, /EGFR inhibition did not improve response in this cohort\./);
+  assert.match(html, /href="https:\/\/example\.test\/against"/);
+  assert.match(html, /Evidence gaps and actions/);
+});
+
+test('the dossier preserves neutral discovery context without presenting it as support', async () => {
+  const { healthy } = await runs();
+  const html = renderTargetView({
+    ...healthy,
+    target: 'PI3K',
+    disease: "Wilson's disease",
+    discovery_snapshot: {
+      name: 'PI3K', rank: 12, ranking: { score: 2 },
+      contextual_passages: [{ text: 'PI3K was mentioned in the disease corpus.', source_url: 'https://example.test/context' }],
+    },
+  });
+  assert.match(html, /Contextual mentions · 1/);
+  assert.match(html, /PI3K was mentioned in the disease corpus\./);
+  assert.match(html, /Supporting evidence · 0/);
+});
+
+test('missing optional subaxes read NOT RUN and NO EVIDENCE rather than FAILED', async () => {
+  const { healthy } = await runs();
+  const partial = structuredClone(healthy);
+  delete partial.axes.X.sub_axes.site_geography;
+  delete partial.axes.Y.sub_axes.target_identity;
+  delete partial.axes.Z.sub_axes.orphan_exclusivity;
+  const html = renderTargetView(partial);
+  assert.match(html, /Evidence gaps and actions/);
+  assert.match(html, /Source has not been run for this target\./);
+  assert.match(html, /Research x geography/);
+  for (const title of ['Subcellular location', 'Market and CMC', 'Orphan status and exclusivity']) {
+    const heading = html.indexOf(`<h3>${title}`);
+    const card = html.slice(html.lastIndexOf('<article', heading), html.indexOf('</article>', heading) + 10);
+    assert.match(card, /s-not-run">not run/);
+    assert.match(card, /NOT RUN · NO EVIDENCE/);
+    assert.doesNotMatch(card, /s-failed">failed/);
+  }
+});
+
+test('blocked optional dependencies suppress derived and illustrative charts', async () => {
+  const { healthy } = await runs();
+  const partial = structuredClone(healthy);
+  delete partial.axes.Z.sub_axes.orphan_exclusivity;
+  const html = renderTargetView(partial);
+  const downstream = html.slice(html.indexOf('Derived / downstream'));
+  for (const title of ['Go-to-market strategy', 'Insight generalization', 'Revenue — illustrative planning model']) {
+    const heading = downstream.indexOf(`<h3>${title}`);
+    const card = downstream.slice(downstream.lastIndexOf('<article', heading), downstream.indexOf('</article>', heading) + 10);
+    assert.match(card, /class="panel p-blocked"/);
+    assert.match(card, /not rendered/);
+    assert.doesNotMatch(card, /<svg|class="viz3d"/);
+  }
+});
+
 test('six further sections are derived from the same five panels, not a sixth axis', async () => {
   const { healthy } = await runs();
   const html = renderTargetView(healthy);

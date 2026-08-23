@@ -1,5 +1,6 @@
 import { caption, escapeHtml } from './html.mjs';
 import { buildRunTrace } from './run-trace.mjs';
+import { buildTargetDossier } from './dossier.mjs';
 import { costFor, modalityMix } from './reference-tables.mjs';
 import { cellDiagram, regionBars, resolutionPlot, sequenceTrack } from './viz.mjs';
 import { bars3d, ribbon3d, scatter3d } from './viz3d.mjs';
@@ -44,6 +45,7 @@ const STAGE_WORDS = {
   degraded: 'degraded',
   failed: 'failed',
   blocked: 'blocked',
+  'not-run': 'not run',
 };
 
 function axisOf(run, axis) {
@@ -103,10 +105,11 @@ function evidenceList(records, { limit = 12 } = {}) {
 }
 
 function panel({ number, title, source, stage, body, evidence }) {
-  const status = stage?.status ?? 'failed';
-  const gate = stage?.gate ?? 'UNKNOWN';
+  const status = stage?.status ?? 'not-run';
+  const gate = stage?.gate ?? 'NOT RUN';
   const issues = stage?.issues ?? [];
-  const detail = `${escapeHtml(gate)} · ${escapeHtml(stage?.records ?? 0)} records${
+  const recordLabel = (stage?.records ?? 0) === 0 ? 'NO EVIDENCE' : `${stage.records} records`;
+  const detail = `${escapeHtml(gate)} · ${escapeHtml(recordLabel)}${
     issues.length ? ` · ${escapeHtml(issues.length)} ${issues.length === 1 ? 'issue' : 'issues'}` : ''}`;
   const why = issues.length
     ? `<p class="vcap flagged">${escapeHtml(`Gate reported: ${issues.join('; ')}`)}</p>`
@@ -148,6 +151,71 @@ function traceSection(trace) {
 <tbody>${rows || '<tr><td colspan="6">No stage has run yet.</td></tr>'}</tbody>
 </table></div>
 <p class="vcap">Each stage passes its own gate before its panel renders. A stage that fails its checks is marked degraded and serves its last healthy snapshot rather than publishing thin data.</p>
+</section>`;
+}
+
+function dossierPassage(passage) {
+  const exact = passage?.text ?? passage?.passage ?? passage?.evidence ?? passage?.exact ?? '';
+  const source = passage?.source_title ?? passage?.paper_title ?? passage?.source ?? passage?.title ?? 'Source evidence';
+  const url = passage?.source_url ?? passage?.sourceUrl ?? passage?.url ?? null;
+  return `<li><blockquote>${escapeHtml(exact || 'No exact passage retained.')}</blockquote><p class="vcap">${
+    url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(source)}</a>` : escapeHtml(source)
+  }</p></li>`;
+}
+
+function dossierEvidenceColumn(title, passages, tone, empty) {
+  return `<div class="dossier-evidence ${escapeHtml(tone)}"><div class="statlab">${escapeHtml(title)}</div>${
+    passages.length ? `<ul>${passages.map(dossierPassage).join('')}</ul>` : caption(empty)
+  }</div>`;
+}
+
+function dossierItem(item) {
+  if (typeof item === 'string') return item;
+  return item?.title ?? item?.label ?? item?.description ?? item?.reason ?? item?.action ?? item?.gap ?? JSON.stringify(item ?? '');
+}
+
+function dossierStage(dossier, axis) {
+  const entry = dossier?.stages?.[axis] ?? dossier?.sources?.[axis] ?? dossier?.[axis.toLowerCase()] ?? null;
+  const rawState = entry?.state ?? entry?.status ?? (entry ? 'NO EVIDENCE' : 'NOT RUN');
+  const state = String(rawState).replaceAll('_', ' ').toUpperCase();
+  const childCount = axis === 'X'
+    ? (entry?.clinical?.records?.length ?? 0) + (entry?.companies?.records?.length ?? 0)
+    : axis === 'Y' ? entry?.structures?.records?.length
+      : axis === 'Z' ? entry?.patents?.records?.length : null;
+  const count = entry?.record_count ?? entry?.records?.length ?? entry?.count ?? childCount ?? null;
+  return { state, count };
+}
+
+function dossierSection(dossier) {
+  const discovery = dossier?.discovery ?? {};
+  const supporting = Array.isArray(discovery.supporting) ? discovery.supporting : (discovery.supporting_passages ?? []);
+  const contradictory = Array.isArray(discovery.contradictory) ? discovery.contradictory : (discovery.contradictory_passages ?? []);
+  const contextual = Array.isArray(discovery.contextual) ? discovery.contextual : (discovery.contextual_passages ?? []);
+  const sources = Array.isArray(discovery.sources) ? discovery.sources : [];
+  const gaps = Array.isArray(dossier?.gaps) ? dossier.gaps : (dossier?.evidence_gaps ?? []);
+  const actions = Array.isArray(dossier?.actions) ? dossier.actions : (dossier?.suggested_actions ?? []);
+  const stages = ['X', 'Y', 'Z'].map((axis) => ({ axis, ...dossierStage(dossier, axis) }));
+  const dossierTarget = dossier?.identity?.target ?? dossier?.subject?.target ?? discovery.name ?? 'this target';
+
+  return `<section class="trace dossier" aria-labelledby="why-target-title">
+<div class="eyebrow">Discovery continuity</div>
+<div class="tracehead"><h2 id="why-target-title">Why this target?</h2><span class="mono">rank ${escapeHtml(value(discovery.rank, 'not ranked'))} · score ${escapeHtml(value(discovery.score, 'not scored'))}</span></div>
+<p class="sub">The exact evidence that moved ${escapeHtml(dossierTarget)} from disease research into diligence remains attached here, including evidence against the hypothesis.</p>
+<div class="dossier-stages">${stages.map((stage) => `<div><span class="statlab">${stage.axis}</span><strong>${escapeHtml(stage.state)}</strong><span>${escapeHtml(stage.count == null ? '' : `${stage.count} records`)}</span></div>`).join('')}</div>
+<div class="dossier-grid">
+${dossierEvidenceColumn(`Supporting evidence · ${supporting.length}`, supporting, 'supporting', 'No supporting passage was attached to this run.')}
+${dossierEvidenceColumn(`Contradictory evidence · ${contradictory.length}`, contradictory, 'contradictory', 'No contradictory passage was retained; this is not proof that none exists.')}
+${dossierEvidenceColumn(`Contextual mentions · ${contextual.length}`, contextual, 'contextual', 'No neutral contextual passage was retained.')}
+</div>
+${sources.length ? `<p class="vcap">${escapeHtml(sources.length)} discovery ${sources.length === 1 ? 'source' : 'sources'} retained in the dossier.</p>` : ''}
+</section>
+<section class="trace dossier-actions" aria-labelledby="gaps-actions-title">
+<div class="eyebrow">Evidence → next work</div>
+<div class="tracehead"><h2 id="gaps-actions-title">Evidence gaps and actions</h2></div>
+<div class="whygrid">
+<div><div class="statlab">Evidence gaps</div>${gaps.length ? `<ul>${gaps.map((gap) => `<li>${escapeHtml(dossierItem(gap))}</li>`).join('')}</ul>` : caption('No explicit evidence gap was recorded.')}</div>
+<div><div class="statlab">Recommended actions</div>${actions.length ? `<ol>${actions.map((action) => `<li>${escapeHtml(dossierItem(action))}</li>`).join('')}</ol>` : caption('No follow-up action was recorded.')}</div>
+</div>
 </section>`;
 }
 
@@ -326,12 +394,26 @@ ${ip.disclaimer ? `<p class="vcap">${escapeHtml(ip.disclaimer)}</p>` : ''}`;
  * The five downstream/derived sections. Each reads its data from `downstream.mjs`'s pure
  * builders and its status from `downstream-status.mjs`'s rollup — the same `panel()` helper
  * every core panel already uses, unchanged, because the rollup's shape matches a run-trace
- * stage exactly. A `blocked` section still calls its builder: with the empty axis data a
- * blocked dependency actually produces, the builder's own honest "no data" message becomes
- * the chart's caption — no separate fabricated placeholder is needed.
+ * stage exactly. A `blocked` section never calls its builder: derived and illustrative
+ * charts stay absent until every dependency has evidence, so an empty optional sub-axis
+ * cannot quietly turn planning assumptions into a result-shaped visual.
  */
 
+function blockedDerivedPanel({ number, title, source, rollup }) {
+  return panel({
+    number,
+    title,
+    source,
+    stage: rollup,
+    body: `<span class="tag risk">not rendered</span>${caption(rollup.note ?? 'Blocked — required evidence is not available in this run.')}`,
+    evidence: basisNote('No derived output was calculated because at least one dependency was not run or had no validated evidence.', rollup.dependsOn),
+  });
+}
+
 function positioningPanel({ x, rollup }) {
+  if (rollup.status === 'blocked') return blockedDerivedPanel({
+    number: '6', title: 'Product positioning', source: 'Derived from X — pipeline activity', rollup,
+  });
   const result = buildProductPositioning({ x });
   const body = `${kindTag(result.kind)}
 ${scatter3d(result.points, { ariaLabel: 'Product positioning by stage, differentiation and manufacturing simplicity', xLabel: result.xLabel, yLabel: result.yLabel, zLabel: result.zLabel, colorVar: 'var(--struct)' })}
@@ -344,6 +426,9 @@ ${result.excludedNoModality?.length ? caption(`Not plotted, no matched modality:
 }
 
 function goToMarketPanel({ geography, orphan, rollup }) {
+  if (rollup.status === 'blocked') return blockedDerivedPanel({
+    number: '7', title: 'Go-to-market strategy', source: 'Derived from X.site_geography and Z.orphan_exclusivity', rollup,
+  });
   const result = buildGoToMarket({ geography, orphan });
   const body = `${kindTag(result.kind)}
 ${bars3d(result.cells, { ariaLabel: 'Go-to-market priority by region and channel', xCategories: result.xCategories, yCategories: result.yCategories, xLabel: result.xLabel, yLabel: result.yLabel, zLabel: result.zLabel, topColorVar: 'var(--struct)' })}
@@ -355,6 +440,9 @@ ${result.message ? caption(result.message) : ''}`;
 }
 
 function generalizationPanel({ x, geography, y, identity, orphan, rollup }) {
+  if (rollup.status === 'blocked') return blockedDerivedPanel({
+    number: '8', title: 'Insight generalization', source: 'Derived from all five core stages', rollup,
+  });
   const result = buildInsightGeneralization({ x, geography, y, identity, orphan });
   const body = `${kindTag(result.kind)}
 <p class="note">${escapeHtml(result.scope ?? '')}</p>
@@ -366,6 +454,9 @@ ${bars3d(result.cells, { ariaLabel: 'Insight generalization triangulation scorec
 }
 
 function revenuePanel({ x, orphan, disease, rollup }) {
+  if (rollup.status === 'blocked') return blockedDerivedPanel({
+    number: '9', title: 'Revenue — illustrative planning model', source: 'Derived from X and Z.orphan_exclusivity, anchored on cited reference tables', rollup,
+  });
   const result = buildRevenueForecast({ x, orphan, disease });
   const body = `${kindTag(result.kind)}
 ${ribbon3d(result.lanes, { ariaLabel: 'Revenue illustrative planning model by year and scenario', xLabel: result.xLabel, zLabel: result.zLabel, bandBetween: result.bandBetween, cliffAt: result.cliffAt })}
@@ -378,6 +469,9 @@ ${result.addressablePopulation ? `<p class="note">Addressable population ${escap
 }
 
 function resourcingPanel({ x, rollup }) {
+  if (rollup.status === 'blocked') return blockedDerivedPanel({
+    number: '10', title: 'Resourcing', source: 'Derived from X — pipeline activity', rollup,
+  });
   const result = buildResourcing({ x });
   const body = `${kindTag(result.kind)}
 ${bars3d(result.cells, { ariaLabel: 'Resourcing headcount by phase and function', xCategories: result.xCategories, yCategories: result.yCategories, xLabel: result.xLabel, yLabel: result.yLabel, zLabel: result.zLabel, topColorVar: 'var(--warn)' })}
@@ -389,6 +483,9 @@ ${result.youAreHere ? caption(`You are here: ${result.youAreHere}, by this run's
 }
 
 function virtualCellPanel({ x, identity, disease, rollup }) {
+  if (rollup.status === 'blocked') return blockedDerivedPanel({
+    number: '11', title: 'Virtual cell — simulated perturbation', source: 'Derived from X and Y.target_identity', rollup,
+  });
   const result = buildVirtualCellSimulation({ x, identity });
   const body = `${kindTag(result.kind)}
 <p class="note">${escapeHtml(result.scope ?? '')}</p>
@@ -477,6 +574,7 @@ tr.stalled td{background:var(--risk-bg)}
 .panel{background:var(--panel);border:1px solid var(--rule);border-radius:14px;padding:22px}
 .panel.p-degraded{border-color:var(--warn)}
 .panel.p-failed,.panel.p-blocked{border-color:var(--risk)}
+.panel.p-not-run{border-style:dashed;color:var(--ink-2)}
 .panel:nth-child(1),.panel:nth-child(4),.panel:nth-child(5){grid-column:1/-1}
 .panelhead{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
 .panelhead>div:first-child{display:flex;gap:10px;align-items:baseline}
@@ -488,6 +586,7 @@ tr.stalled td{background:var(--risk-bg)}
 .s-released{background:var(--ok-bg);color:var(--ok)}
 .s-degraded{background:var(--warn-bg);color:var(--warn)}
 .s-failed,.s-blocked{background:var(--risk-bg);color:var(--risk)}
+.s-not-run{background:var(--rule);color:var(--ink-2)}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:16px}
 .stat{border-left:2px solid var(--rule-2);padding-left:12px}
 .statlab{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
@@ -534,6 +633,20 @@ footer{margin-top:34px;border-top:1px solid var(--rule);padding-top:16px;font-si
 .whygrid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:14px}
 .whygrid ul{margin:6px 0 0;padding-left:18px}
 .whygrid li{margin:6px 0;font-size:13px;color:var(--ink-2)}
+.dossier{border-width:2px;border-color:var(--struct)}
+.dossier-stages{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0}
+.dossier-stages>div{display:grid;gap:2px;border:1px solid var(--rule);border-radius:9px;padding:11px;background:var(--paper)}
+.dossier-stages strong{font-family:var(--mono);font-size:12px}
+.dossier-stages span:last-child{font-size:11px;color:var(--ink-3)}
+.dossier-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.dossier-evidence{border-left:3px solid var(--rule-2);padding:12px 14px;background:var(--paper);border-radius:0 9px 9px 0}
+.dossier-evidence.supporting{border-color:var(--ok)}
+.dossier-evidence.contradictory{border-color:var(--risk)}
+.dossier-evidence.contextual{border-color:var(--struct)}
+.dossier-evidence ul{list-style:none;margin:8px 0 0;padding:0}
+.dossier-evidence li+li{border-top:1px solid var(--rule);margin-top:12px;padding-top:12px}
+.dossier-evidence blockquote{margin:0;font-size:13px}
+.dossier-actions .whygrid ul,.dossier-actions .whygrid ol{margin:6px 0 0;padding-left:20px}
 .panels-diligence{margin-top:18px}
 .taskform{display:grid;gap:9px;margin-top:12px}
 .taskform input,.taskform textarea,.taskform select{width:100%;font:inherit;font-size:13px;border:1px solid var(--rule-2);border-radius:8px;padding:9px 10px;background:var(--paper);color:var(--ink)}
@@ -548,7 +661,7 @@ button:hover{filter:brightness(1.08)}
 .decision.d-final{border-color:var(--ok)}
 .decision.d-ready{border-color:var(--struct)}
 .decision.d-pending{border-style:dashed;color:var(--ink-2)}
-@media(max-width:860px){.panels{grid-template-columns:1fr}header.top{flex-direction:column;align-items:flex-start}h1{font-size:32px}.whygrid{grid-template-columns:1fr}}
+@media(max-width:860px){.panels{grid-template-columns:1fr}header.top{flex-direction:column;align-items:flex-start}h1{font-size:32px}.whygrid,.dossier-grid{grid-template-columns:1fr}}
 `;
 
 function page({ title, content, script = '' }) {
@@ -694,9 +807,18 @@ export function renderEmptyView() {
 
 export function renderTargetView(run, workflow = null) {
   if (!run?.axes) return renderEmptyView();
-  const { disease, target } = runIdentity(run);
+  const dossier = buildTargetDossier(run);
+  const fallbackIdentity = runIdentity(run);
+  const disease = dossier?.identity?.disease ?? dossier?.subject?.disease ?? fallbackIdentity.disease;
+  const target = dossier?.identity?.target ?? dossier?.subject?.target ?? fallbackIdentity.target;
   const trace = buildRunTrace(run);
-  const stageOf = (id) => trace.stages.find((stage) => stage.id === id) ?? { status: 'failed', gate: 'UNKNOWN', records: 0, issues: [] };
+  const stageOf = (id, { optional = false } = {}) => trace.stages.find((stage) => stage.id === id) ?? {
+    status: optional ? 'not-run' : 'failed',
+    gate: optional ? 'NOT RUN' : 'UNKNOWN',
+    records: 0,
+    issues: [],
+    note: optional ? 'Optional evidence source was not run for this target.' : null,
+  };
 
   const x = axisOf(run, 'X');
   const y = axisOf(run, 'Y');
@@ -708,9 +830,9 @@ export function renderTargetView(run, workflow = null) {
   const panels = [
     targetPanel({ x, identity, stage: stageOf('X') }),
     structurePanel({ y, identity, stage: stageOf('Y') }),
-    locationPanel({ identity, stage: stageOf('Y.target_identity') }),
-    marketPanel({ x, geography, disease, stage: stageOf('X.site_geography') }),
-    orphanPanel({ z, orphan, stage: stageOf('Z.orphan_exclusivity') }),
+    locationPanel({ identity, stage: stageOf('Y.target_identity', { optional: true }) }),
+    marketPanel({ x, geography, disease, stage: stageOf('X.site_geography', { optional: true }) }),
+    orphanPanel({ z, orphan, stage: stageOf('Z.orphan_exclusivity', { optional: true }) }),
   ].join('');
 
   const downstreamRollup = rollupAllDownstream(trace);
@@ -726,6 +848,7 @@ export function renderTargetView(run, workflow = null) {
   return page({
     title: `Mend — ${target}/${disease}`,
     content: `${header(trace, { disease, target })}
+${dossierSection(dossier)}
 <section class="trace">
 <div class="tracehead"><h2>Factory line</h2></div>
 <p class="sub">Disease name in, five stations, six derived products — a break in any station is visible all the way through.</p>

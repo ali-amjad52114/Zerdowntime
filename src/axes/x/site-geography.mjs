@@ -197,6 +197,67 @@ export function summarizeSiteGeography(records) {
   };
 }
 
+function emptySiteSummary() {
+  return {
+    label: 'X — TRIAL SITE GEOGRAPHY',
+    trials: 0,
+    total_sites: 0,
+    countries_covered: 0,
+    regions_covered: 0,
+    single_country_trials: 0,
+    trials_without_reported_sites: 0,
+    concentration_ratio: 0,
+    concentration_threshold: CONCENTRATION_THRESHOLD,
+    concentrated: false,
+    countries: [],
+    regions: [],
+    unmapped_countries: [],
+    evidence_record_ids: [],
+    analysis_scope: 'No matching studies were returned, so no trial-site geography could be calculated.',
+    feasibility_conclusion: null,
+    disclaimer: 'A successful zero-match search is an evidence gap, not evidence that no development activity exists.',
+  };
+}
+
+/** Derive geography from an already retrieved ClinicalTrials.gov study list. No network call. */
+export function runSiteGeographyFromStudies({
+  studies,
+  query,
+  retrievedAt = new Date().toISOString(),
+  sourceQueryUrl = 'https://clinicaltrials.gov/search',
+  sourceName = 'ClinicalTrials.gov',
+} = {}) {
+  if (!Array.isArray(studies)) throw new Error('site geography requires a ClinicalTrials.gov studies array');
+  if (!text(query?.disease) || !text(query?.target)) throw new Error('site geography requires disease and target');
+  if (studies.length === 0) {
+    const record = {
+      axis: 'X',
+      sub_axis: 'site_geography',
+      subject: `${query.target} / ${query.disease}`,
+      value: '0 matching studies',
+      source_url: sourceQueryUrl,
+      retrieved_at: retrievedAt,
+      evidence: `The completed ClinicalTrials.gov query returned 0 studies, leaving trial-site geography unavailable for ${query.target} / ${query.disease}.`,
+      record_type: 'evidence_gap',
+      nct_id: null,
+      countries: [],
+      site_count: 0,
+      source_name: sourceName,
+    };
+    return {
+      axis: 'X', sub_axis: 'site_geography', records: [record], summary: emptySiteSummary(),
+      validation: { status: 'PASS', checks: ['SOURCE_QUERY_COMPLETED', 'ZERO_MATCH_EVIDENCE_GAP'], evidence_gap: true },
+    };
+  }
+  const records = normalizeTrialSites({ studies, source_name: sourceName }, {
+    retrievedAt,
+    subject: `${query.target} / ${query.disease}`,
+    sourceName,
+  });
+  const validation = validateTrialSiteRecords(records);
+  return { axis: 'X', sub_axis: 'site_geography', records, summary: summarizeSiteGeography(records), validation };
+}
+
 /** Source-agnostic runner. Inject a live ClinicalTrials.gov client or a saved response reader. */
 export async function runSiteGeography({
   retrieve,

@@ -12,7 +12,7 @@ import { completeDiligenceTask, createDiligenceWorkflow, recordDiligenceDecision
 import { healthySnapshot, runVerticalSlice } from './mend/vertical-slice.mjs';
 import { renderTargetView } from './mend/ui.mjs';
 import { discoverDiseaseCorpus } from './mend/discovery/corpus.mjs';
-import { retrySelectedTargetAxis, runSelectedTargetDiligence } from './mend/discovery/handoff.mjs';
+import { createDiscoveryHandoffSnapshot, retrySelectedTargetAxis, runSelectedTargetDiligence } from './mend/discovery/handoff.mjs';
 import { discoverTargets } from './mend/discovery/targets.mjs';
 import { renderDiscoveryView } from './mend/discovery/ui.mjs';
 import { createFileStateStore } from './mend/state-store.mjs';
@@ -51,6 +51,7 @@ function bindTargetRun(run, { disease, diseaseRunId, candidate, runId } = {}) {
     disease: run?.disease ?? disease,
     target: candidate?.name ?? run?.target,
     uniprot_id: canonicalUniProtId(run) ?? (String(candidate?.uniprot_id ?? '').trim().toUpperCase() || null),
+    discovery_snapshot: run?.discovery_snapshot ?? createDiscoveryHandoffSnapshot(candidate),
   };
 }
 
@@ -373,6 +374,7 @@ export function createApp({
               candidateId: candidate.candidate_id,
               targetAliases: candidate.aliases ?? [],
               uniprotId: candidate.uniprot_id ?? null,
+              discoverySnapshot: candidate,
               pipelineAcquire: brightDataAcquire,
               telemetry,
               parentSpan: requestSpan,
@@ -804,6 +806,7 @@ export function createApp({
             candidateId: candidate.candidate_id,
             targetAliases: candidate.aliases ?? [],
             uniprotId: candidate.uniprot_id ?? null,
+            discoverySnapshot: candidate,
             pipelineAcquire: brightDataAcquire,
             telemetry,
             parentSpan: requestSpan,
@@ -960,12 +963,18 @@ export function createApp({
       }
       if (request.method === 'GET' && url.pathname === '/mend') {
         const canonicalRun = latestMendRun ?? [...targetRuns.values()].at(-1) ?? null;
+        const canonicalCandidate = canonicalRun && !canonicalRun.discovery_snapshot
+          ? discoveryState.candidates.find((candidate) => candidate.candidate_id === canonicalRun.candidate_id)
+          : null;
+        const canonicalViewRun = canonicalCandidate
+          ? bindTargetRun(canonicalRun, { candidate: canonicalCandidate, disease: canonicalRun.disease ?? discoveryState.disease })
+          : canonicalRun;
         const canonicalWorkflow = canonicalRun
           ? diligenceWorkflows.get(canonicalRun.runId) ?? (latestDiligenceWorkflow?.runId === canonicalRun.runId ? latestDiligenceWorkflow : null)
           : null;
         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        response.end(canonicalRun
-          ? renderTargetView(canonicalRun, canonicalWorkflow)
+        response.end(canonicalViewRun
+          ? renderTargetView(canonicalViewRun, canonicalWorkflow)
           : renderDiscoveryView(discoveryState));
         return;
       }

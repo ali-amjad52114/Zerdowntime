@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { runClinicalTrialsAxis } from '../../axes/x/clinical-trials.mjs';
+import { runSiteGeographyFromStudies } from '../../axes/x/site-geography.mjs';
 import { runYAxis } from '../../axes/y/structure.mjs';
 import { createEpoLinkedDataRetriever } from '../../axes/z/epo-linked-data.mjs';
 import { runZAxis } from '../../axes/z-ip-activity.mjs';
-import { resolveUniProtTarget } from '../../axes/y/target-identity.mjs';
+import { resolveUniProtTarget, retrieveUniProtEntry, runTargetIdentity } from '../../axes/y/target-identity.mjs';
 import { runVerticalSlice } from '../vertical-slice.mjs';
 
 async function executeSponsorRequest({ telemetry, parentSpan, correlation, axis, provider, operation, run }) {
@@ -60,6 +61,51 @@ async function executeSponsorRequest({ telemetry, parentSpan, correlation, axis,
   }
 }
 
+function clone(value) {
+  return value == null ? value : structuredClone(value);
+}
+
+export function createDiscoveryHandoffSnapshot(candidate) {
+  if (!candidate || typeof candidate !== 'object') return null;
+  const allEvidence = candidate.evidence ?? [];
+  const supporting = candidate.supporting_passages
+    ?? candidate.supportingPassages
+    ?? allEvidence.filter((item) => item?.classification === 'SUPPORTING');
+  const contradictory = candidate.contradictory_passages
+    ?? candidate.contradictoryPassages
+    ?? allEvidence.filter((item) => item?.classification === 'CONTRADICTORY');
+  const contextual = candidate.contextual_passages
+    ?? candidate.contextualPassages
+    ?? candidate.neutral_passages
+    ?? allEvidence.filter((item) => item?.classification === 'NEUTRAL');
+  return clone({
+    candidate_id: candidate.candidate_id ?? candidate.id ?? null,
+    name: candidate.name ?? candidate.symbol ?? null,
+    aliases: candidate.aliases ?? [],
+    uniprot_id: candidate.uniprot_id ?? null,
+    rank: candidate.rank ?? null,
+    ranking: candidate.ranking ?? {},
+    supporting_passages: supporting,
+    contradictory_passages: contradictory,
+    contextual_passages: contextual,
+    evidence: [...supporting, ...contradictory, ...contextual],
+    sources: candidate.sources ?? [],
+  });
+}
+
+function geographyFromClinical(clinical, { disease, target }) {
+  const snapshot = clinical.source_snapshot;
+  if (!snapshot || !Array.isArray(snapshot.studies)) {
+    throw new Error('ClinicalTrials.gov result is missing its reusable study snapshot');
+  }
+  return runSiteGeographyFromStudies({
+    studies: snapshot.studies,
+    query: { disease, target },
+    retrievedAt: snapshot.retrieved_at,
+    sourceQueryUrl: snapshot.query_url,
+  });
+}
+
 export async function runSelectedTargetDiligence({
   disease,
   target,
@@ -72,6 +118,8 @@ export async function runSelectedTargetDiligence({
   telemetry,
   parentSpan,
   pipelineAcquire,
+  candidateSnapshot,
+  discoverySnapshot,
 } = {}) {
   const correlation = {
     diseaseRunId, candidateId, targetRunId: runId, targetName: target,
@@ -82,7 +130,21 @@ export async function runSelectedTargetDiligence({
         telemetry, parentSpan: axisSpan, correlation, axis: 'X', provider: 'clinicaltrials.gov', operation: 'clinical-trials-search',
         run: () => runClinicalTrialsAxis({ disease, target, fetchImpl }),
       });
-      if (typeof pipelineAcquire !== 'function') return clinical;
+      const siteGeography = geographyFromClinical(clinical, { disease, target });
+      if (typeof pipelineAcquire !== 'function') {
+        return {
+          axis: 'X',
+          records: clinical.records,
+          summary: {
+            ...clinical.summary,
+            clinical_records: clinical.summary.programsFound,
+            pipeline_records: 0,
+            programsFound: clinical.summary.programsFound,
+          },
+          validation: { status: 'PASS', checks: ['CLINICAL_SOURCE_LINKED', 'SITE_GEOGRAPHY_DERIVED_FROM_CLINICAL_RESPONSE'] },
+          sub_axes: { clinical_trials: clinical, site_geography: siteGeography },
+        };
+      }
       const pipeline = await executeSponsorRequest({
         telemetry, parentSpan: axisSpan, correlation, axis: 'X', provider: 'bright_data', operation: 'pipeline-acquisition',
         run: () => pipelineAcquire({
@@ -94,25 +156,40 @@ export async function runSelectedTargetDiligence({
         records: [...clinical.records, ...pipeline.records],
         summary: {
           ...clinical.summary,
-          clinical_records: clinical.records.length,
+          clinical_records: clinical.summary.programsFound,
           pipeline_records: pipeline.records.length,
-          programsFound: clinical.records.length + pipeline.records.length,
+          programsFound: clinical.summary.programsFound + pipeline.records.length,
           brightdata_source_execution_id: pipeline.source_execution?.execution_id ?? null,
         },
-        validation: { status: 'PASS', checks: ['CLINICAL_SOURCE_LINKED', 'BRIGHTDATA_SOURCE_LINKED'] },
-        sub_axes: { clinical_trials: clinical, company_pipeline: pipeline },
+        validation: { status: 'PASS', checks: ['CLINICAL_SOURCE_LINKED', 'BRIGHTDATA_SOURCE_LINKED', 'SITE_GEOGRAPHY_DERIVED_FROM_CLINICAL_RESPONSE'] },
+        sub_axes: { clinical_trials: clinical, company_pipeline: pipeline, site_geography: siteGeography },
       };
     },
     Y: async ({ parentSpan: axisSpan } = {}) => {
-      const accession = uniprotId || (await executeSponsorRequest({
+      const suppliedAccession = String(uniprotId ?? '').trim().toUpperCase();
+      const accession = suppliedAccession || (await executeSponsorRequest({
         telemetry, parentSpan: axisSpan, correlation, axis: 'Y', provider: 'uniprot', operation: 'target-resolution',
         run: () => resolveUniProtTarget({ target, fetchImpl }),
       })).accession;
-      const result = await executeSponsorRequest({
-        telemetry, parentSpan: axisSpan, correlation, axis: 'Y', provider: 'rcsb', operation: 'structure-search',
-        run: () => runYAxis({ accession, subject: target, fetchImpl, maxEntries: 25 }),
-      });
-      return { ...result, summary: { ...result.summary, uniprot_id: accession, identity_match: 'exact_uniprot_accession' } };
+      const [result, targetIdentity] = await Promise.all([
+        executeSponsorRequest({
+          telemetry, parentSpan: axisSpan, correlation, axis: 'Y', provider: 'rcsb', operation: 'structure-search',
+          run: () => runYAxis({ accession, subject: target, fetchImpl, maxEntries: 25 }),
+        }),
+        executeSponsorRequest({
+          telemetry, parentSpan: axisSpan, correlation, axis: 'Y', provider: 'uniprot', operation: 'target-identity',
+          run: () => runTargetIdentity({
+            retrieve: () => retrieveUniProtEntry({ accession, fetchImpl }),
+            query: { accession, target, disease },
+            sourceName: 'UniProtKB',
+          }),
+        }),
+      ]);
+      return {
+        ...result,
+        summary: { ...result.summary, uniprot_id: accession, identity_match: 'exact_uniprot_accession' },
+        sub_axes: { ...(result.sub_axes ?? {}), target_identity: targetIdentity },
+      };
     },
     Z: async ({ parentSpan: axisSpan } = {}) => executeSponsorRequest({
       telemetry, parentSpan: axisSpan, correlation, axis: 'Z', provider: 'epo', operation: 'patent-search',
@@ -123,7 +200,7 @@ export async function runSelectedTargetDiligence({
       }),
     }),
   };
-  return runVerticalSlice({
+  const run = await runVerticalSlice({
     axisRunners,
     mode: 'normal',
     factoryVersion: 'discovery-v1',
@@ -132,14 +209,56 @@ export async function runSelectedTargetDiligence({
     parentSpan,
     correlation,
   });
+  return {
+    ...run,
+    disease_run_id: diseaseRunId ?? null,
+    candidate_id: candidateId ?? null,
+    disease,
+    target,
+    uniprot_id: run.axes?.Y?.summary?.uniprot_id ?? uniprotId ?? null,
+    discovery_snapshot: createDiscoveryHandoffSnapshot(discoverySnapshot ?? candidateSnapshot),
+  };
 }
 
-function liveAxisRunner(axis, { disease, target, fetchImpl, uniprotId }) {
-  if (axis === 'X') return () => runClinicalTrialsAxis({ disease, target, fetchImpl });
+function liveAxisRunner(axis, { disease, target, fetchImpl, uniprotId, existingAxis }) {
+  if (axis === 'X') return async () => {
+    const clinical = await runClinicalTrialsAxis({ disease, target, fetchImpl });
+    const siteGeography = geographyFromClinical(clinical, { disease, target });
+    const companyPipeline = existingAxis?.sub_axes?.company_pipeline;
+    const pipelineRecords = companyPipeline?.records ?? [];
+    return {
+      axis: 'X',
+      records: [...clinical.records, ...pipelineRecords],
+      summary: {
+        ...clinical.summary,
+        clinical_records: clinical.summary.programsFound,
+        pipeline_records: pipelineRecords.length,
+        programsFound: clinical.summary.programsFound + pipelineRecords.length,
+      },
+      validation: { status: 'PASS', checks: ['CLINICAL_SOURCE_LINKED', 'SITE_GEOGRAPHY_DERIVED_FROM_CLINICAL_RESPONSE', ...(companyPipeline ? ['PRESERVED_COMPANY_PIPELINE'] : [])] },
+      sub_axes: {
+        clinical_trials: clinical,
+        ...(companyPipeline ? { company_pipeline: companyPipeline } : {}),
+        site_geography: siteGeography,
+      },
+    };
+  };
   if (axis === 'Y') return async () => {
-    const accession = uniprotId || (await resolveUniProtTarget({ target, fetchImpl })).accession;
-    const result = await runYAxis({ accession, subject: target, fetchImpl, maxEntries: 25 });
-    return { ...result, summary: { ...result.summary, uniprot_id: accession, identity_match: 'exact_uniprot_accession' } };
+    const accession = String(uniprotId ?? '').trim().toUpperCase()
+      || (await resolveUniProtTarget({ target, fetchImpl })).accession;
+    const [result, targetIdentity] = await Promise.all([
+      runYAxis({ accession, subject: target, fetchImpl, maxEntries: 25 }),
+      runTargetIdentity({
+        retrieve: () => retrieveUniProtEntry({ accession, fetchImpl }),
+        query: { accession, target, disease },
+        sourceName: 'UniProtKB',
+      }),
+    ]);
+    return {
+      ...result,
+      summary: { ...result.summary, uniprot_id: accession, identity_match: 'exact_uniprot_accession' },
+      sub_axes: { ...(result.sub_axes ?? {}), target_identity: targetIdentity },
+    };
   };
   if (axis === 'Z') return () => runZAxis({
     retrieve: createEpoLinkedDataRetriever({ fetchImpl, limit: 25, timeoutMs: 45_000 }),
@@ -187,6 +306,7 @@ export async function retrySelectedTargetAxis({
     name,
     name === normalizedAxis ? liveAxisRunner(name, {
       disease, target, fetchImpl, uniprotId: existingRun.axes?.Y?.summary?.uniprot_id,
+      existingAxis: existingRun.axes?.[name],
     }) : preserved(name),
   ]));
   try {

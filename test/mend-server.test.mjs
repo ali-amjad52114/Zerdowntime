@@ -126,6 +126,10 @@ test('disease research discovers evidence-linked targets before X/Y/Z handoff', 
   assert.equal(state.handoff.status, 'COMPLETE');
   assert.equal(state.handoff.results[0].target, 'EGFR');
   assert.equal(state.handoff.results[0].run.axes.X.records[0].subject, 'EGFR');
+  assert.equal(state.handoff.results[0].run.discovery_snapshot.name, 'EGFR');
+  assert.equal(state.handoff.results[0].run.discovery_snapshot.ranking.supporting_evidence, 1);
+  assert.equal(state.handoff.results[0].run.discovery_snapshot.ranking.contradictory_evidence, 1);
+  assert.equal(state.handoff.results[0].run.discovery_snapshot.evidence.length, 3);
 
   const html = await (await fetch(`${base}/mend`)).text();
   assert.match(html, /Example disease/);

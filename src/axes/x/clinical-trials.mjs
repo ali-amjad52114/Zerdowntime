@@ -43,10 +43,30 @@ export function normalizeClinicalTrials(studies, { disease, target, retrievedAt 
 }
 
 export function summarizeClinicalTrials(records) {
+  const programs = records.filter((record) => record.record_type !== 'evidence_gap');
   return {
-    programsFound: records.length,
-    organizations: new Set(records.map((record) => record.organization).filter(Boolean)).size,
-    mostAdvancedStage: records.map((record) => record.development_stage).find(Boolean) ?? null,
+    programsFound: programs.length,
+    organizations: new Set(programs.map((record) => record.organization).filter(Boolean)).size,
+    mostAdvancedStage: programs.map((record) => record.development_stage).find(Boolean) ?? null,
+  };
+}
+
+function zeroMatchEvidence({ disease, target, sourceUrl, retrievedAt }) {
+  return {
+    axis: 'X',
+    sub_axis: 'clinical_trials',
+    subject: target,
+    value: '0 matching studies',
+    source_url: sourceUrl,
+    retrieved_at: retrievedAt,
+    evidence: `ClinicalTrials.gov completed the bounded query for target ${target} and disease ${disease} and returned 0 studies.`,
+    record_type: 'evidence_gap',
+    trial_id: null,
+    title: null,
+    organization: null,
+    interventions: [],
+    development_stage: null,
+    status: null,
   };
 }
 
@@ -59,6 +79,7 @@ export async function runClinicalTrialsAxis({ disease, target, fetchImpl = globa
   url.searchParams.set('query.term', target);
   url.searchParams.set('pageSize', String(bounded(maxStudies)));
   url.searchParams.set('format', 'json');
+  const sourceUrl = url.toString();
   let response;
   let lastError;
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -73,11 +94,27 @@ export async function runClinicalTrialsAxis({ disease, target, fetchImpl = globa
   if (!response?.ok && lastError) throw lastError;
   if (!response?.ok) throw new Error(`ClinicalTrials.gov request failed with HTTP ${response?.status ?? 'unknown'}`);
   const payload = await response.json();
-  const records = normalizeClinicalTrials(payload?.studies, { disease, target });
+  if (!Array.isArray(payload?.studies)) throw new Error('ClinicalTrials.gov response is missing studies');
+  const retrievedAt = new Date().toISOString();
+  const normalized = normalizeClinicalTrials(payload.studies, { disease, target, retrievedAt });
+  if (payload.studies.length > 0 && normalized.length === 0) {
+    throw new Error('ClinicalTrials.gov returned studies without usable trial identity or subject evidence');
+  }
+  const records = normalized.length
+    ? normalized
+    : [zeroMatchEvidence({ disease, target, sourceUrl, retrievedAt })];
   return {
     axis: 'X',
     records,
     summary: summarizeClinicalTrials(records),
-    validation: records.length ? { status: 'PASS', checks: ['NON_EMPTY', 'SOURCE_LINKED'] } : { status: 'FAIL', reason: 'no target-specific clinical studies found' },
+    validation: normalized.length
+      ? { status: 'PASS', checks: ['NON_EMPTY', 'SOURCE_LINKED'] }
+      : { status: 'PASS', checks: ['SOURCE_QUERY_COMPLETED', 'ZERO_MATCH_EVIDENCE_GAP'], evidence_gap: true },
+    source_snapshot: {
+      provider: 'clinicaltrials.gov',
+      query_url: sourceUrl,
+      retrieved_at: retrievedAt,
+      studies: payload.studies,
+    },
   };
 }
